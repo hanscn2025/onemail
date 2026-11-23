@@ -37,50 +37,58 @@
 </div>
 
 <div id="app" class="app hidden">
+  <header class="topbar">
+    <button class="icon-btn" id="menuBtn" title="展开或收起菜单" aria-label="菜单"><i data-i="menu"></i></button>
+    <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 13l8-5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></span><span class="brand-name">OneMail</span></div>
+    <div class="top-search"><i data-i="search"></i><input id="search" type="search" placeholder="搜索邮件:主题、发件人、内容" aria-label="搜索邮件"></div>
+    <div class="top-actions">
+      <button class="icon-btn" id="refreshBtn" title="刷新" aria-label="刷新"><i data-i="refresh"></i></button>
+      <button class="icon-btn" id="settingsTop" data-p="settings" title="设置" aria-label="设置"><i data-i="gear"></i></button>
+      <div class="me-wrap">
+        <button class="avatar-btn" id="meBtn" title="账号" aria-label="账号" aria-haspopup="true"><span class="avatar" id="meAvatar"></span></button>
+        <div class="me-menu hidden" id="meMenu" role="menu">
+          <div class="me-card"><span class="avatar" id="meAvatar2"></span><div class="me-text"><strong id="meName"></strong><span class="muted" id="meAddr"></span></div></div>
+          <a data-p="settings" role="menuitem"><i data-i="gear"></i>设置</a>
+          <a id="logoutLink" role="menuitem"><i data-i="logout"></i>退出登录</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
   <aside class="side">
-    <div class="brand"><span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 13l8-5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></span><span>OneMail</span></div>
-    <button class="primary compose-btn" id="composeBtn"><i data-i="pen"></i>写信</button>
+    <button class="compose-btn" id="composeBtn"><i data-i="pen"></i><span>写信</span></button>
     <select id="boxSel" class="hidden" title="查看哪个邮箱"></select>
     <nav id="folders">
       <a data-f="inbox"><i data-i="inbox"></i><span>收件箱</span><b data-c="inbox"></b></a>
       <a data-f="starred"><i data-i="star"></i><span>星标</span></a>
       <a data-f="sent"><i data-i="send"></i><span>已发送</span></a>
-      <a data-f="drafts"><i data-i="file"></i><span>草稿</span><b data-c="drafts" class="plain"></b></a>
+      <a data-f="drafts"><i data-i="file"></i><span>草稿</span></a>
       <a data-f="trash"><i data-i="trash"></i><span>垃圾箱</span></a>
     </nav>
     <div class="nav-label">工具</div>
     <nav id="pages">
       <a data-p="temp"><i data-i="shuffle"></i><span>临时邮箱</span></a>
-    </nav>
-    <div class="side-foot">
       <a id="adminLink" class="hidden" data-p="admin"><i data-i="shield"></i><span>管理后台</span></a>
       <a id="settingsLink" data-p="settings"><i data-i="gear"></i><span>设置</span></a>
-      <div class="me">
-        <span class="avatar" id="meAvatar"></span>
-        <span class="me-text"><span id="meName"></span><span class="muted" id="meAddr"></span></span>
-        <button class="icon-btn" id="logoutLink" title="退出登录" aria-label="退出登录"><i data-i="logout"></i></button>
-      </div>
-    </div>
+    </nav>
   </aside>
+  <div class="scrim" id="scrim"></div>
 
-  <section class="list">
-    <div class="list-head">
-      <button class="icon-btn mobile-only" id="menuBtn" aria-label="菜单"><i data-i="menu"></i></button>
-      <div class="search"><i data-i="search"></i><input id="search" type="search" placeholder="搜索主题、发件人、内容"></div>
-      <button class="icon-btn" id="refreshBtn" title="刷新" aria-label="刷新"><i data-i="refresh"></i></button>
-    </div>
-    <div class="list-sub">
-      <strong id="folderTitle">收件箱</strong>
-      <select id="rcptSel" class="rcpt-sel hidden" title="按收件地址筛选"></select>
-    </div>
-    <div id="items"></div>
-    <button id="moreBtn" class="more hidden">加载更多</button>
-  </section>
+  <main class="surface">
+    <section class="list">
+      <div class="list-head">
+        <strong id="folderTitle">收件箱</strong>
+        <select id="rcptSel" class="rcpt-sel hidden" title="按收件地址筛选"></select>
+      </div>
+      <div id="items"></div>
+      <button id="moreBtn" class="more hidden">加载更多</button>
+    </section>
 
-  <main class="page hidden" id="page"></main>
+    <div class="page hidden" id="page"></div>
 
-  <main class="reader" id="reader">
-    <div class="empty"><i data-i="mailopen"></i><p>选一封信来看</p></div>
+    <section class="reader" id="reader">
+      <div class="empty"><i data-i="mailopen"></i><p>选一封信来看</p></div>
+    </section>
   </main>
 </div>
 

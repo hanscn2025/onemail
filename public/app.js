@@ -121,7 +121,7 @@ async function boot() {
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#meAddr').textContent = state.me.address;
   $('#meName').textContent = state.me.name || state.me.address.split('@')[0];
-  $('#meAvatar').outerHTML = avatar(state.me.name, state.me.address).replace('class="avatar"', 'class="avatar" id="meAvatar"');
+  for (const id of ['meAvatar', 'meAvatar2']) $('#' + id).outerHTML = avatar(state.me.name, state.me.address).replace('class="avatar"', `class="avatar" id="${id}"`);
   state.box = state.me.address;
   if (state.me.is_admin) {
     $('#adminLink').classList.remove('hidden');
@@ -148,7 +148,12 @@ let searchT;
 $('#search').addEventListener('input', (e) => { clearTimeout(searchT); searchT = setTimeout(() => { state.q = e.target.value.trim(); loadList(); }, 300); });
 $('#refreshBtn').onclick = () => loadList();
 $('#moreBtn').onclick = () => loadList(true);
-$('#menuBtn').onclick = () => $('#app').classList.toggle('menu');
+// 菜单按钮:手机上滑出侧栏,电脑上收起或展开侧栏
+$('#menuBtn').onclick = () => $('#app').classList.toggle(window.innerWidth <= 720 ? 'menu' : 'collapsed');
+$('#scrim').onclick = () => $('#app').classList.remove('menu');
+// 头像菜单
+$('#meBtn').onclick = (e) => { e.stopPropagation(); $('#meMenu').classList.toggle('hidden'); };
+document.addEventListener('click', (e) => { if (!e.target.closest('.me-wrap')) $('#meMenu').classList.add('hidden'); });
 
 async function loadCounts() {
   const c = await api(withBox('/counts')).catch(() => ({}));
@@ -420,11 +425,10 @@ $$('[data-p]').forEach((a) => (a.onclick = () => openPage(a.dataset.p)));
 
 function head(title, desc, right = '') {
   return `<header class="page-head">
-    <button class="icon-btn mobile-only" data-menu aria-label="菜单">${icon('menu')}</button>
     <div class="page-title"><h1>${title}</h1>${desc ? `<p class="muted">${desc}</p>` : ''}</div>${right}</header>`;
 }
 function wire(root = page) {
-  $$('[data-menu]', root).forEach((b) => (b.onclick = () => $('#app').classList.toggle('menu')));
+  $('#meMenu').classList.add('hidden');
 }
 
 // 通用编辑弹窗:fields 是表单 HTML,onSave(FormData) 抛错时显示在弹窗里
