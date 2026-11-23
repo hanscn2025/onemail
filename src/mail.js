@@ -39,6 +39,12 @@ export async function route(env, rcpt) {
   if (a) {
     out.via = a.kind;
     if (!a.enabled || (a.expires_at && a.expires_at < Date.now())) { out.reject = 'Address not found'; return out; }
+    if (a.kind === 'temp' && a.auto) {
+      // 自动登记的地址:按当前的默认规则送
+      catchAll(env, out);
+      await env.DB.prepare('UPDATE addresses SET hits = hits + 1, last_at = ? WHERE address = ?').bind(Date.now(), rcpt).run();
+      return out;
+    }
     if (a.kind === 'group') {
       for (const m of JSON.parse(a.members || '[]')) (isLocal(env, m) ? out.boxes : out.forwards).add(m);
     } else if (a.owner && (a.kind === 'alias' || a.deliver)) out.boxes.add(a.owner);
@@ -48,11 +54,22 @@ export async function route(env, rcpt) {
     return out;
   }
   out.via = 'catchall';
+  catchAll(env, out);
+  if (!out.reject) {
+    // 第一次收到信的前缀自动登记成临时地址,之后可以在临时邮箱里单独停用或改设置
+    const box = (env.CATCH_ALL || '').trim().toLowerCase() || null;
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO addresses (address, kind, owner, auto, hits, last_at, created_at) VALUES (?, 'temp', ?, 1, 1, ?, ?)`
+    ).bind(rcpt, box, Date.now(), Date.now()).run();
+  }
+  return out;
+}
+
+function catchAll(env, out) {
   const box = (env.CATCH_ALL || '').trim().toLowerCase();
   if (box) out.boxes.add(box);
   if (env.CATCH_ALL_FWD) out.forwards.add(env.CATCH_ALL_FWD);
   if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
-  return out;
 }
 
 // 自动回复:同一个发件人 4 天内只回一次;群发、退信、自动邮件不回

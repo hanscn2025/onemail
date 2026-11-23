@@ -78,6 +78,8 @@ const USER_COLUMNS = {
   ar_until: 'INTEGER NOT NULL DEFAULT 0',
   last_login: 'INTEGER NOT NULL DEFAULT 0',
 };
+// auto=1:没提前建、第一次收到信时自动登记的地址,跟随兜底(默认)规则
+const ADDR_COLUMNS = { auto: 'INTEGER NOT NULL DEFAULT 0' };
 
 let schemaReady = false;
 let cached = null;
@@ -87,11 +89,13 @@ const CACHE_MS = 30_000; // 别的实例改了设置(比如填了发信 Key),最
 async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map((s) => env.DB.prepare(s)));
-  const cols = new Set((await env.DB.prepare('PRAGMA table_info(users)').all()).results.map((c) => c.name));
-  for (const [name, def] of Object.entries(USER_COLUMNS)) {
-    if (cols.has(name)) continue;
-    try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN ${name} ${def}`).run(); } catch (e) {
-      if (!/duplicate column/i.test(e.message)) throw e; // 别的实例刚加过
+  for (const [table, wanted] of [['users', USER_COLUMNS], ['addresses', ADDR_COLUMNS]]) {
+    const cols = new Set((await env.DB.prepare(`PRAGMA table_info(${table})`).all()).results.map((c) => c.name));
+    for (const [name, def] of Object.entries(wanted)) {
+      if (cols.has(name)) continue;
+      try { await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`).run(); } catch (e) {
+        if (!/duplicate column/i.test(e.message)) throw e; // 别的实例刚加过
+      }
     }
   }
   schemaReady = true;

@@ -1,6 +1,6 @@
 // 临时地址、个人设置、草稿、管理后台(账号、别名群组、收信规则、统计、记录)
 import { hashPassword } from './auth.js';
-import { saveSetting } from './config.js';
+import { saveSetting, getSetting } from './config.js';
 import { snippetOf } from './mail.js';
 
 const json = (data, status = 200) =>
@@ -47,6 +47,32 @@ export async function fromAddresses(env, user) {
 
 const addrRow = (a) => ({ ...a, members: JSON.parse(a.members || '[]') });
 
+// 升级前用过的前缀(收过信但没登记的地址)补登记成自动临时地址,只做一次
+async function backfillAuto(env) {
+  if (await getSetting(env, 'auto_temp_v1')) return;
+  const r = await env.DB.prepare(
+    `SELECT envelope_to AS a, mailbox, COUNT(*) AS n, MAX(date) AS last FROM messages
+     WHERE envelope_to IS NOT NULL AND folder NOT IN ('sent', 'drafts') GROUP BY envelope_to, mailbox`
+  ).all();
+  const users = new Set((await env.DB.prepare('SELECT address FROM users').all()).results.map((x) => x.address));
+  const known = new Set((await env.DB.prepare('SELECT address FROM addresses').all()).results.map((x) => x.address));
+  const merged = new Map();
+  for (const x of r.results) {
+    const [l, d] = String(x.a).toLowerCase().split('@');
+    if (!d || !isLocal(env, x.a)) continue;
+    const addr = `${l.split('+')[0]}@${d}`;
+    if (users.has(addr) || known.has(addr) || addr === x.mailbox) continue;
+    const m = merged.get(addr) || { owner: x.mailbox, n: 0, last: 0 };
+    m.n += x.n; m.last = Math.max(m.last, x.last);
+    merged.set(addr, m);
+  }
+  const stmts = [...merged].map(([addr, m]) => env.DB.prepare(
+    `INSERT OR IGNORE INTO addresses (address, kind, owner, auto, hits, last_at, created_at) VALUES (?, 'temp', ?, 1, ?, ?, ?)`
+  ).bind(addr, m.owner, m.n, m.last, m.last));
+  for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
+  await saveSetting(env, 'auto_temp_v1', String(Date.now()));
+}
+
 export async function extra(path, method, request, env, user, url) {
   // ---------- 个人设置 ----------
   if (path === '/settings' && method === 'GET') {
@@ -78,11 +104,17 @@ export async function extra(path, method, request, env, user, url) {
 
   // ---------- 临时地址(每个人管自己的;管理员加 ?all=1 看全部) ----------
   if (path === '/temp' && method === 'GET') {
+    await backfillAuto(env);
     const all = user.is_admin && url.searchParams.get('all') === '1';
+    // 管理员的「我的」也包括没有归属邮箱的自动地址(兜底只转发、不存邮箱时)
+    const mine = user.is_admin ? '(owner = ? OR owner IS NULL)' : 'owner = ?';
     const r = await env.DB.prepare(
-      `SELECT * FROM addresses WHERE kind = 'temp' ${all ? '' : 'AND owner = ?'} ORDER BY created_at DESC`
+      `SELECT * FROM addresses WHERE kind = 'temp' ${all ? '' : 'AND ' + mine} ORDER BY MAX(last_at, created_at) DESC`
     ).bind(...(all ? [] : [user.address])).all();
-    return json({ items: r.results.map(addrRow), domain: domainsOf(env)[0] || '' });
+    const out = { items: r.results.map(addrRow), domain: domainsOf(env)[0] || '' };
+    // 默认规则就是兜底规则;管理员能看能改
+    if (user.is_admin) out.defaults = { box: env.CATCH_ALL || '', fwd: env.CATCH_ALL_FWD || '', locked: !!env.CATCH_ALL_LOCKED };
+    return json(out);
   }
   if (path === '/temp' && method === 'POST') {
     const b = await body(request);
@@ -119,9 +151,13 @@ export async function extra(path, method, request, env, user, url) {
       if ('deliver' in b) next.deliver = b.deliver ? 1 : 0;
       if ('fwd_to' in b) { const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error); next.fwd_to = f.value; }
       if ('days' in b) { const d = Number(b.days) || 0; next.expires_at = d ? Date.now() + d * DAY : 0; }
-      if (!next.deliver && !next.fwd_to) return err('至少选一个:存进我的邮箱,或转发到外部邮箱');
-      await env.DB.prepare('UPDATE addresses SET enabled = ?, note = ?, deliver = ?, fwd_to = ?, expires_at = ? WHERE address = ?')
-        .bind(next.enabled, next.note, next.deliver, next.fwd_to, next.expires_at, address).run();
+      // 自动地址:auto=true 继续跟随默认规则;改了去向就变成单独设置
+      if ('auto' in b) next.auto = b.auto ? 1 : 0;
+      else if ('deliver' in b || 'fwd_to' in b) next.auto = 0;
+      if (!next.auto && !next.deliver && !next.fwd_to) return err('至少选一个:存进我的邮箱,或转发到外部邮箱');
+      if (!next.auto && next.deliver && !next.owner) next.owner = user.address;
+      await env.DB.prepare('UPDATE addresses SET enabled = ?, note = ?, deliver = ?, fwd_to = ?, expires_at = ?, auto = ?, owner = ? WHERE address = ?')
+        .bind(next.enabled, next.note, next.deliver, next.fwd_to, next.expires_at, next.auto, next.owner, address).run();
       return json({ ok: true });
     }
   }
