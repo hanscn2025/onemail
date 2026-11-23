@@ -58,8 +58,8 @@ export async function getSessionUser(request, env) {
     return null;
   }
   if (!p.e || p.e < Date.now() / 1000) return null;
-  const user = await env.DB.prepare('SELECT id, address, name, is_admin, session_ver FROM users WHERE id = ?').bind(p.u).first();
-  if (!user || user.session_ver !== p.v) return null;
+  const user = await env.DB.prepare('SELECT id, address, name, is_admin, session_ver, disabled FROM users WHERE id = ?').bind(p.u).first();
+  if (!user || user.session_ver !== p.v || user.disabled) return null;
   return user;
 }
 

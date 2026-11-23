@@ -4,12 +4,14 @@
 
 A webmail that runs entirely on Cloudflare. Mail sent to `anything@your-domain` lands in your web inbox. No server needed, and personal use fits within Cloudflare's free tier.
 
-- Receive at any address: addresses you never created still work. Each message shows which address it was sent to, and you can filter by address
-- Separate mailboxes: create accounts for family or teammates; each person signs in and sees only their own mail. Bulk creation is supported
+- **Receive at any address**: any prefix `@your-domain` works. Each message shows which address it was sent to, and you can filter by address
+- **Temporary addresses**: one address per website, with an optional expiry and note. Mail goes to your inbox or is forwarded to Gmail or another external mailbox. Disable one and later mail is bounced
+- **Business-style accounts**: separate accounts for family or teammates; each person signs in, sends and receives, and sees only their own mail. Bulk creation is supported
+- **Aliases and groups**: `sales@` lands in alice's inbox and she can send as it; `team@` delivers one message to several members (external addresses allowed)
+- **Full mail features**: compose, reply, forward, drafts, signature, auto-reply, forwarding to an external mailbox; replies default to the address the mail was sent to
+- **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), aliases and groups, all temporary addresses, catch-all rules, sending setup, and login / delivery / sending logs
+- Remote images are blocked by default (anti-tracking), HTML mail is rendered in a sandbox, and trash is emptied after 30 days
 - `name+anything@domain` goes to the same mailbox
-- Remote images are blocked by default (anti-tracking), and HTML mail is rendered in a sandbox
-- Trash is emptied automatically after 30 days
-- Sending: connect the free Resend plan (100 emails/day) to compose, reply and forward, including replying from the address the mail was sent to
 
 > The web interface is currently in Chinese only.
 
@@ -33,14 +35,30 @@ Note: if this domain already uses another mail service (Google Workspace, Micros
 1. Is Email Routing enabled?
 2. Does the Catch-all rule point to your Worker, and is it enabled?
 3. Is the domain you entered during first-run setup correct?
+4. Check Admin console → Logs → Receiving to see whether the message was bounced (address disabled or expired, mailbox full)
+
+## How a message is delivered
+
+1. To an **account address**: into that account's inbox, and also forwarded if the account has forwarding set
+2. To an **alias, group or temporary address**: according to its own settings; disabled or expired addresses bounce
+3. To **any other address**: handled by the catch-all rule in Admin console → Routing (store in a mailbox, forward externally, or bounce)
+
+## Forwarding to external mailboxes
+
+Temporary addresses, personal settings, group members and the catch-all rule can all forward to Gmail, Outlook and so on. Forwarding uses Cloudflare's built-in forwarding: free and outside the sending quota, but **each external mailbox must be verified once**:
+
+Cloudflare dashboard → your domain → Email → Email Routing → Destination addresses → Add, then click the verification link sent to that mailbox.
+
+Forwarding to an unverified address fails; you will see it in the admin overview and logs.
 
 ## How it works
 
 - **Receiving**: Email Routing hands every message for the domain to the Worker's `email()` handler. After parsing with postal-mime, message metadata is stored in D1; bodies, attachments and the original .eml go to R2.
   If the address has an account, the message goes there; otherwise it goes to the admin mailbox (the admin address from first-run setup).
 - **Web app**: a single-page app in `public/`. Sessions use an HttpOnly cookie; every state-changing request must carry the `X-Mail: 1` header (CSRF protection); 5 wrong passwords in a row from the same IP or for the same account lock it for 15 minutes.
-- **Config**: first-run setup writes the domain, catch-all mailbox and session secret to the D1 `settings` table. They can be overridden with vars / secrets: `DOMAINS` (comma-separated), `CATCH_ALL`, `SESSION_SECRET`.
-- **Cron**: every day at 03:17 UTC, messages that have been in the trash longer than `TRASH_DAYS` days are deleted.
+- **Addresses**: the `addresses` table holds temporary addresses, aliases and groups; the `logs` table holds login, delivery, forwarding and sending records (kept 90 days). Tables and new columns are created on first run, and older databases are upgraded automatically.
+- **Config**: first-run setup writes the domain, catch-all mailbox, catch-all forward, session secret and Resend key to the D1 `settings` table. They can be overridden with vars / secrets: `DOMAINS` (comma-separated), `CATCH_ALL`, `SESSION_SECRET`, `RESEND_API_KEY`.
+- **Cron**: every day at 03:17 UTC, messages that have been in the trash longer than `TRASH_DAYS` days and expired logs are deleted.
 
 ## Enable sending
 
@@ -48,7 +66,9 @@ Receiving works without this. To send mail, use Resend's free tier (100 emails/d
 
 1. Sign up for free at [resend.com](https://resend.com) and add your domain under **Domains**. Choose the automatic Cloudflare setup to have the DNS records added for you, then wait until the status is **Verified**.
 2. Under **API Keys**, create a key (**Sending access** is enough) and copy it.
-3. Sign in as admin → 邮箱账号管理 (account management) → 发信(Resend) (sending), paste the key and save. The page tells you whether your domain has been verified.
+3. Sign in as admin → 管理后台 (Admin console) → 发信 (Sending), paste the key and save. The page tells you whether your domain has been verified.
+
+The free quota is shared by all accounts; you can set a per-account daily send limit under Admin console → Accounts.
 
 Compose, reply and forward then work. Instead of the web page, you can also add a `RESEND_API_KEY` secret under the Worker's **Settings → Variables and Secrets**; it takes priority over the key entered on the page.
 

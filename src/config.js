@@ -36,7 +36,48 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_msg_trash ON messages(folder, moved_at)`,
   `CREATE TABLE IF NOT EXISTS login_fail (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  // 账号之外的地址:临时地址(temp)、别名(alias)、群组(group)
+  `CREATE TABLE IF NOT EXISTS addresses (
+    address TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    owner TEXT,
+    members TEXT NOT NULL DEFAULT '[]',
+    deliver INTEGER NOT NULL DEFAULT 1,
+    fwd_to TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    expires_at INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    hits INTEGER NOT NULL DEFAULT 0,
+    last_at INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_addr_owner ON addresses(owner, kind)`,
+  // 登录、投递、转发、发信等记录
+  `CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    actor TEXT NOT NULL DEFAULT '',
+    target TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    ip TEXT NOT NULL DEFAULT '')`,
+  `CREATE INDEX IF NOT EXISTS idx_logs_at ON logs(kind, at DESC)`,
+  `CREATE TABLE IF NOT EXISTS autoreply_seen (key TEXT PRIMARY KEY, at INTEGER NOT NULL)`,
 ];
+
+// 老数据库升级时补上的列
+const USER_COLUMNS = {
+  disabled: 'INTEGER NOT NULL DEFAULT 0',
+  quota_mb: 'INTEGER NOT NULL DEFAULT 0',
+  send_limit: 'INTEGER NOT NULL DEFAULT 0',
+  signature: "TEXT NOT NULL DEFAULT ''",
+  fwd_to: "TEXT NOT NULL DEFAULT ''",
+  fwd_keep: 'INTEGER NOT NULL DEFAULT 1',
+  ar_on: 'INTEGER NOT NULL DEFAULT 0',
+  ar_subject: "TEXT NOT NULL DEFAULT ''",
+  ar_body: "TEXT NOT NULL DEFAULT ''",
+  ar_until: 'INTEGER NOT NULL DEFAULT 0',
+  last_login: 'INTEGER NOT NULL DEFAULT 0',
+};
 
 let schemaReady = false;
 let cached = null;
@@ -46,6 +87,13 @@ const CACHE_MS = 30_000; // 别的实例改了设置(比如填了发信 Key),最
 async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map((s) => env.DB.prepare(s)));
+  const cols = new Set((await env.DB.prepare('PRAGMA table_info(users)').all()).results.map((c) => c.name));
+  for (const [name, def] of Object.entries(USER_COLUMNS)) {
+    if (cols.has(name)) continue;
+    try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN ${name} ${def}`).run(); } catch (e) {
+      if (!/duplicate column/i.test(e.message)) throw e; // 别的实例刚加过
+    }
+  }
   schemaReady = true;
 }
 
@@ -61,6 +109,8 @@ async function loadConfig(env) {
     domains: env.DOMAINS !== undefined ? env.DOMAINS : s.domains || '',
     catchAll: env.CATCH_ALL !== undefined ? env.CATCH_ALL : s.catch_all || '',
     resendKey: env.RESEND_API_KEY || s.resend_key || '',
+    catchAllFwd: s.catch_all_fwd || '',
+    catchAllLocked: env.CATCH_ALL !== undefined,
   };
   if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存,别的实例完成设置后这里能读到
   return cfg;
@@ -74,6 +124,8 @@ export async function withConfig(env) {
     DOMAINS: { value: cfg.domains },
     CATCH_ALL: { value: cfg.catchAll },
     RESEND_API_KEY: { value: cfg.resendKey },
+    CATCH_ALL_FWD: { value: cfg.catchAllFwd },
+    CATCH_ALL_LOCKED: { value: cfg.catchAllLocked },
   });
 }
 

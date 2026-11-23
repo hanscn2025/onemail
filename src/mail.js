@@ -14,25 +14,75 @@ function localPart(addr) {
   return `${l.split('+')[0]}@${d}`;
 }
 
-// Email Routing 的 email() 入口
-export async function receive(message, env) {
-  const rcpt = localPart(message.to);
-  const domains = (env.DOMAINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-  if (domains.length && !domains.includes(rcpt.split('@')[1])) {
-    message.setReject('Domain not handled');
-    return;
-  }
-  const user = await env.DB.prepare('SELECT address FROM users WHERE address = ?').bind(rcpt).first();
-  const mailbox = user?.address || (env.CATCH_ALL || '').trim().toLowerCase();
-  if (!mailbox) {
-    message.setReject('Address not found');
-    return;
-  }
+export async function addLog(env, kind, actor, target, detail = '', ip = '') {
+  try {
+    await env.DB.prepare('INSERT INTO logs (at, kind, actor, target, detail, ip) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(Date.now(), kind, String(actor || '').slice(0, 200), String(target || '').slice(0, 200), String(detail || '').slice(0, 500), ip).run();
+  } catch (e) { console.error('log failed', e.message); }
+}
 
-  const raw = await new Response(message.raw).arrayBuffer();
-  const p = await PostalMime.parse(raw);
+const domainsOf = (env) => (env.DOMAINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const isLocal = (env, a) => domainsOf(env).includes(String(a).split('@')[1]);
+
+// 决定一封信去哪:存进哪些邮箱、转发到哪些外部地址
+// 返回 { boxes: Set, forwards: Set, reject: string|null, via: 'user'|'temp'|'alias'|'group'|'catchall' }
+export async function route(env, rcpt) {
+  const out = { boxes: new Set(), forwards: new Set(), reject: null, via: '' };
+  const user = await env.DB.prepare('SELECT address, disabled FROM users WHERE address = ?').bind(rcpt).first();
+  if (user) {
+    if (user.disabled) out.reject = 'Mailbox disabled';
+    else out.boxes.add(user.address);
+    out.via = 'user';
+    return out;
+  }
+  const a = await env.DB.prepare('SELECT * FROM addresses WHERE address = ?').bind(rcpt).first();
+  if (a) {
+    out.via = a.kind;
+    if (!a.enabled || (a.expires_at && a.expires_at < Date.now())) { out.reject = 'Address not found'; return out; }
+    if (a.kind === 'group') {
+      for (const m of JSON.parse(a.members || '[]')) (isLocal(env, m) ? out.boxes : out.forwards).add(m);
+    } else if (a.owner && (a.kind === 'alias' || a.deliver)) out.boxes.add(a.owner);
+    if (a.kind === 'temp' && a.fwd_to) out.forwards.add(a.fwd_to);
+    await env.DB.prepare('UPDATE addresses SET hits = hits + 1, last_at = ? WHERE address = ?').bind(Date.now(), rcpt).run();
+    if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
+    return out;
+  }
+  out.via = 'catchall';
+  const box = (env.CATCH_ALL || '').trim().toLowerCase();
+  if (box) out.boxes.add(box);
+  if (env.CATCH_ALL_FWD) out.forwards.add(env.CATCH_ALL_FWD);
+  if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
+  return out;
+}
+
+// 自动回复:同一个发件人 4 天内只回一次;群发、退信、自动邮件不回
+async function autoReply(env, u, p, sender, rcpt) {
+  if (!u.ar_on || (u.ar_until && u.ar_until < Date.now())) return;
+  if (!env.RESEND_API_KEY && !env.EMAIL) return;
+  const s = String(sender || '').toLowerCase();
+  if (!s || s === u.address || /^(no-?reply|mailer-daemon|postmaster|bounce)/i.test(s) || isLocal(env, s) && s === rcpt) return;
+  const h = Object.fromEntries((p.headers || []).map((x) => [x.key, String(x.value || '').toLowerCase()]));
+  if ((h['auto-submitted'] && h['auto-submitted'] !== 'no') || h['list-id'] || h['list-unsubscribe'] || /bulk|list|junk/.test(h['precedence'] || '')) return;
+  const key = `${u.address}|${s}`;
+  const seen = await env.DB.prepare('SELECT at FROM autoreply_seen WHERE key = ?').bind(key).first();
+  if (seen && seen.at > Date.now() - 4 * 86400000) return;
+  await env.DB.prepare('INSERT INTO autoreply_seen (key, at) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at').bind(key, Date.now()).run();
+  const text = u.ar_body || '你好,我暂时不在,回来后会尽快回复你。';
+  try {
+    await sendOut(env, {
+      from: { email: u.address, name: u.name || '' }, to: [s], cc: [], bcc: [],
+      subject: u.ar_subject || `自动回复:${p.subject || ''}`, text, html: textToHtml(text),
+      inReplyTo: p.messageId || null, references: p.messageId || null, attachments: [], autoReply: true,
+    });
+    await addLog(env, 'autoreply', u.address, s);
+  } catch (e) {
+    await addLog(env, 'autoreply_fail', u.address, s, e.message);
+  }
+}
+
+// 把解析好的信存进一个邮箱
+async function store(env, mailbox, p, raw, message) {
   const id = crypto.randomUUID();
-
   const attach = [];
   for (const [i, a] of (p.attachments || []).entries()) {
     const content = typeof a.content === 'string' ? new TextEncoder().encode(a.content) : a.content;
@@ -50,34 +100,72 @@ export async function receive(message, env) {
   await env.BUCKET.put(`body/${id}.json`, JSON.stringify({ text: p.text || '', html: p.html || '' }), {
     httpMetadata: { contentType: 'application/json' },
   });
-
   const from = p.from?.address ? p.from : { address: message.from, name: '' };
   const visibleAttach = attach.filter((a) => !(a.inline && a.cid));
   await env.DB.prepare(
     `INSERT INTO messages (id, mailbox, folder, message_id, in_reply_to, refs, envelope_to, from_addr, from_name,
        to_json, cc_json, reply_to, subject, snippet, attach_json, has_attach, size, date)
      VALUES (?, ?, 'inbox', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(
-      id,
-      mailbox,
-      p.messageId || null,
-      p.inReplyTo || null,
-      p.references || null,
-      message.to.toLowerCase(),
-      (from.address || '').toLowerCase(),
-      from.name || '',
-      JSON.stringify(addrList(p.to)),
-      JSON.stringify(addrList(p.cc)),
-      p.replyTo?.[0]?.address || null,
-      p.subject || '',
-      snippetOf(p.text, p.html),
-      JSON.stringify(attach),
-      visibleAttach.length ? 1 : 0,
-      message.rawSize || raw.byteLength,
-      Date.now()
-    )
-    .run();
+  ).bind(
+    id, mailbox, p.messageId || null, p.inReplyTo || null, p.references || null,
+    message.to.toLowerCase(), (from.address || '').toLowerCase(), from.name || '',
+    JSON.stringify(addrList(p.to)), JSON.stringify(addrList(p.cc)), p.replyTo?.[0]?.address || null,
+    p.subject || '', snippetOf(p.text, p.html), JSON.stringify(attach), visibleAttach.length ? 1 : 0,
+    message.rawSize || raw.byteLength, Date.now()
+  ).run();
+}
+
+// Email Routing 的 email() 入口
+export async function receive(message, env) {
+  const rcpt = localPart(message.to);
+  const domains = domainsOf(env);
+  if (domains.length && !domains.includes(rcpt.split('@')[1])) {
+    message.setReject('Domain not handled');
+    return;
+  }
+  const r = await route(env, rcpt);
+  if (r.reject) {
+    await addLog(env, 'reject', message.from, rcpt, r.reject);
+    message.setReject(r.reject);
+    return;
+  }
+
+  // 收件邮箱各自的设置:停用、容量、转发、自动回复
+  const size = message.rawSize || 0;
+  const users = [];
+  for (const box of r.boxes) {
+    const u = await env.DB.prepare('SELECT * FROM users WHERE address = ?').bind(box).first();
+    if (!u) { users.push({ address: box, keep: true }); continue; } // 兜底邮箱没有账号也照样存
+    if (u.disabled) continue;
+    if (u.quota_mb) {
+      const used = (await env.DB.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM messages WHERE mailbox = ?').bind(box).first()).n;
+      if (used + size > u.quota_mb * 1048576) { await addLog(env, 'quota', message.from, box, '邮箱满了'); continue; }
+    }
+    if (u.fwd_to) r.forwards.add(u.fwd_to);
+    users.push({ ...u, keep: !u.fwd_to || !!u.fwd_keep });
+  }
+  if (!users.some((u) => u.keep) && !r.forwards.size) {
+    message.setReject('Mailbox full or disabled');
+    return;
+  }
+
+  // 先转发再读正文;转发只能发给在 Cloudflare 里验证过的地址
+  for (const to of r.forwards) {
+    try {
+      await message.forward(to);
+      await addLog(env, 'forward', message.from, rcpt, `转发到 ${to}`);
+    } catch (e) {
+      await addLog(env, 'forward_fail', message.from, rcpt, `转发到 ${to} 失败:${e.message}`);
+    }
+  }
+
+  const keep = users.filter((u) => u.keep);
+  if (!keep.length) return;
+  const raw = await new Response(message.raw).arrayBuffer();
+  const p = await PostalMime.parse(raw);
+  for (const u of keep) await store(env, u.address, p, raw, message);
+  await addLog(env, 'deliver', message.from, rcpt, keep.map((u) => u.address).join(', ') + (r.via !== 'user' ? `(${r.via})` : ''));
+  for (const u of users) if (u.ar_on) await autoReply(env, u, p, p.from?.address || message.from, rcpt);
 }
 
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -96,6 +184,7 @@ export async function sendOut(env, m) {
   const headers = {};
   if (m.inReplyTo) headers['In-Reply-To'] = m.inReplyTo;
   if (m.references) headers['References'] = m.references;
+  if (m.autoReply) headers['Auto-Submitted'] = 'auto-replied';
 
   if (env.RESEND_API_KEY) {
     const r = await fetch('https://api.resend.com/emails', {

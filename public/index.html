@@ -45,11 +45,16 @@
       <a data-f="inbox"><i data-i="inbox"></i><span>收件箱</span><b data-c="inbox"></b></a>
       <a data-f="starred"><i data-i="star"></i><span>星标</span></a>
       <a data-f="sent"><i data-i="send"></i><span>已发送</span></a>
+      <a data-f="drafts"><i data-i="file"></i><span>草稿</span><b data-c="drafts" class="plain"></b></a>
       <a data-f="trash"><i data-i="trash"></i><span>垃圾箱</span></a>
     </nav>
+    <div class="nav-label">工具</div>
+    <nav id="pages">
+      <a data-p="temp"><i data-i="shuffle"></i><span>临时邮箱</span></a>
+    </nav>
     <div class="side-foot">
-      <a id="adminLink" class="hidden"><i data-i="users"></i><span>邮箱账号管理</span></a>
-      <a id="settingsLink"><i data-i="gear"></i><span>设置</span></a>
+      <a id="adminLink" class="hidden" data-p="admin"><i data-i="shield"></i><span>管理后台</span></a>
+      <a id="settingsLink" data-p="settings"><i data-i="gear"></i><span>设置</span></a>
       <div class="me">
         <span class="avatar" id="meAvatar"></span>
         <span class="me-text"><span id="meName"></span><span class="muted" id="meAddr"></span></span>
@@ -72,6 +77,8 @@
     <button id="moreBtn" class="more hidden">加载更多</button>
   </section>
 
+  <main class="page hidden" id="page"></main>
+
   <main class="reader" id="reader">
     <div class="empty"><i data-i="mailopen"></i><p>选一封信来看</p></div>
   </main>
@@ -87,61 +94,25 @@
     <label class="row">主题<input name="subject"></label>
     <textarea name="text" rows="14"></textarea>
     <input type="hidden" name="reply_to_id">
+    <input type="hidden" name="draft_id">
     <div class="dlg-foot">
       <label class="file-btn"><i data-i="clip"></i>添加附件<input type="file" name="files" multiple hidden></label>
       <span id="fileNames" class="muted"></span>
       <span class="spacer"></span>
       <span class="error" id="sendErr"></span>
+      <button type="button" id="draftBtn">存草稿</button>
       <button class="primary" type="submit" id="sendBtn"><i data-i="send"></i><span>发送</span></button>
     </div>
   </form>
 </dialog>
 
-<dialog id="settingsDlg">
-  <div class="dlg-head"><strong>设置</strong><button type="button" class="icon-btn" data-close aria-label="关闭"><i data-i="x"></i></button></div>
-  <form id="nameForm" class="stack">
-    <label>显示名称(发信时对方看到的名字)<input name="dname"></label>
-    <button type="submit">保存名称</button>
+<dialog id="editDlg">
+  <form id="editForm" method="dialog">
+    <div class="dlg-head"><strong id="editTitle"></strong><button type="button" class="icon-btn" data-close aria-label="关闭"><i data-i="x"></i></button></div>
+    <div id="editBody" class="stack"></div>
+    <p class="error" id="editErr"></p>
+    <div class="dlg-foot"><span class="spacer"></span><button type="button" data-close>取消</button><button class="primary" type="submit">保存</button></div>
   </form>
-  <hr>
-  <form id="pwForm" class="stack">
-    <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
-    <label>新密码(至少 10 位)<input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
-    <button type="submit">修改密码</button>
-  </form>
-  <p class="muted" id="settingsMsg"></p>
-</dialog>
-
-<dialog id="adminDlg" class="wide">
-  <div class="dlg-head"><strong>邮箱账号管理</strong><button type="button" class="icon-btn" data-close aria-label="关闭"><i data-i="x"></i></button></div>
-  <table class="users"><thead><tr><th>地址</th><th>名称</th><th>信件</th><th></th></tr></thead><tbody id="userRows"></tbody></table>
-  <h3>新建邮箱</h3>
-  <form id="newUserForm" class="grid">
-    <input name="local" placeholder="用户名" required><span id="domainSuffix"></span>
-    <input name="dname" placeholder="显示名称(可选)">
-    <input name="password" type="password" placeholder="密码(至少 10 位)" minlength="10" autocomplete="new-password" required>
-    <label class="inline"><input type="checkbox" name="is_admin"> 管理员</label>
-    <button type="submit" class="primary">创建</button>
-  </form>
-  <p class="muted" id="adminMsg"></p>
-  <h3>批量创建</h3>
-  <form id="batchForm" class="stack">
-    <textarea name="lines" rows="6" placeholder="每行一个账号,格式:用户名[,密码][,显示名称]&#10;不写密码会自动生成&#10;例如:&#10;alice&#10;bob,MyPassword123,Bob Li&#10;carol,,Carol"></textarea>
-    <div class="dlg-foot">
-      <span class="muted" id="batchMsg"></span><span class="spacer"></span>
-      <button type="button" id="batchCsv" class="hidden">下载结果 CSV</button>
-      <button type="submit" class="primary" id="batchBtn">批量创建</button>
-    </div>
-  </form>
-  <table class="users hidden" id="batchTable"><thead><tr><th>地址</th><th>密码</th><th>结果</th></tr></thead><tbody></tbody></table>
-  <h3>发信(Resend)</h3>
-  <p class="muted" id="sendStatus"></p>
-  <form id="resendForm" class="dlg-foot">
-    <input name="key" type="password" placeholder="re_ 开头的 API Key" autocomplete="off" style="flex:1">
-    <button type="submit" class="primary">保存</button>
-    <button type="button" id="resendClear">清除</button>
-  </form>
-  <p class="muted">没有 Key?到 resend.com 免费注册,添加你的域名并验证,再在 API Keys 里创建一个。免费每天 100 封、每月 3000 封。</p>
 </dialog>
 
 <div id="toast" class="toast"></div>

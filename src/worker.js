@@ -2,14 +2,15 @@ import {
   hashPassword, verifyPassword, makeSessionCookie, clearCookie, getSessionUser,
   checkLocked, recordFail, clearFail,
 } from './auth.js';
-import { receive, sendOut, snippetOf, textToHtml } from './mail.js';
+import { receive, sendOut, snippetOf, textToHtml, addLog } from './mail.js';
+import { extra, fromAddresses } from './routes.js';
 import { withConfig, isConfigured, runSetup, getSetting, saveSetting } from './config.js';
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
 const err = (msg, status = 400) => json({ error: msg }, status);
 
-const FOLDERS = ['inbox', 'sent', 'trash', 'starred'];
+const FOLDERS = ['inbox', 'sent', 'drafts', 'trash', 'starred'];
 const EMAIL_RE = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/;
 const MAX_SEND_BYTES = 20 * 1024 * 1024;
 
@@ -75,9 +76,16 @@ async function api(request, env, url) {
     const u = await env.DB.prepare('SELECT * FROM users WHERE address = ?').bind(addr).first();
     if (!u || !(await verifyPassword(String(password || ''), u.pass_hash))) {
       await recordFail(env, keys);
+      await addLog(env, 'login_fail', addr, '', '密码不对或没有这个账号', ip);
       return err('邮箱或密码不对', 401);
     }
+    if (u.disabled) {
+      await addLog(env, 'login_fail', addr, '', '账号已停用', ip);
+      return err('这个账号已被管理员停用', 403);
+    }
     await clearFail(env, keys);
+    await env.DB.prepare('UPDATE users SET last_login = ? WHERE id = ?').bind(Date.now(), u.id).run();
+    await addLog(env, 'login', addr, '', (request.headers.get('User-Agent') || '').slice(0, 160), ip);
     return json({ ok: true }, 200, { 'Set-Cookie': await makeSessionCookie(env, u) });
   }
 
@@ -87,7 +95,11 @@ async function api(request, env, url) {
   if (path === '/logout' && method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': clearCookie });
 
   if (path === '/me' && method === 'GET') {
-    const out = { address: user.address, name: user.name, is_admin: !!user.is_admin, domains: domainsOf(env), can_send: !!(env.RESEND_API_KEY || env.EMAIL) };
+    const full = await env.DB.prepare('SELECT signature FROM users WHERE id = ?').bind(user.id).first();
+    const out = {
+      address: user.address, name: user.name, is_admin: !!user.is_admin, domains: domainsOf(env),
+      can_send: !!(env.RESEND_API_KEY || env.EMAIL), signature: full?.signature || '', from: await fromAddresses(env, user),
+    };
     if (user.is_admin) {
       const r = await env.DB.prepare(
         `SELECT address FROM users UNION SELECT DISTINCT mailbox FROM messages ORDER BY 1`
@@ -160,6 +172,7 @@ async function api(request, env, url) {
         attachments: JSON.parse(msg.attach_json),
         text: body.text,
         html: body.html,
+        draft: body.draft || null,
       });
     }
 
@@ -175,7 +188,7 @@ async function api(request, env, url) {
     }
 
     if (sub === '' && method === 'DELETE') {
-      if (msg.folder !== 'trash') return err('先移到垃圾箱');
+      if (msg.folder !== 'trash' && msg.folder !== 'drafts') return err('先移到垃圾箱');
       await deleteMsgObjects(env, msg);
       await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(msg.id).run();
       return json({ ok: true });
@@ -241,12 +254,20 @@ async function api(request, env, url) {
       }
     }
 
-    // 管理员替别的邮箱发信时,发件人是那个邮箱
+    // 发件人:自己、自己的别名和临时地址;管理员可以用本域名的任何地址
     let fromAddr = user.address;
     const asBox = String(fd.get('from') || '').toLowerCase();
     if (asBox && asBox !== user.address) {
-      if (!user.is_admin || !domainsOf(env).includes(asBox.split('@')[1])) return err('不能用这个地址发信', 403);
+      const mine = await fromAddresses(env, user);
+      if (!mine.includes(asBox) && !(user.is_admin && domainsOf(env).includes(asBox.split('@')[1]))) return err('不能用这个地址发信', 403);
       fromAddr = asBox;
+    }
+    // 每天发信上限(管理员给账号设的,0 表示不限)
+    const lim = await env.DB.prepare('SELECT send_limit FROM users WHERE id = ?').bind(user.id).first();
+    if (lim?.send_limit) {
+      const n = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM messages WHERE mailbox = ? AND folder = 'sent' AND date > ?`)
+        .bind(user.address, Date.now() - 86400000).first()).n;
+      if (n >= lim.send_limit) return err(`已达到每天 ${lim.send_limit} 封的发信上限,请明天再发或联系管理员`, 429);
     }
     const fromUser = await env.DB.prepare('SELECT name FROM users WHERE address = ?').bind(fromAddr).first();
     const html = textToHtml(text);
@@ -258,7 +279,15 @@ async function api(request, env, url) {
       });
     } catch (e) {
       console.error('send failed', e.code, e.message);
+      await addLog(env, 'send_fail', fromAddr, all.join(', '), e.message);
       return err(`发送失败:${e.code ? e.code + ' ' : ''}${e.message}`, 502);
+    }
+    await addLog(env, 'send', fromAddr, all.join(', '), subject);
+    // 从草稿发出的,删掉草稿
+    const draftId = String(fd.get('draft_id') || '');
+    if (draftId) {
+      const d = await env.DB.prepare(`SELECT * FROM messages WHERE id = ? AND folder = 'drafts' AND mailbox = ?`).bind(draftId, user.address).first();
+      if (d) { await deleteMsgObjects(env, d); await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(d.id).run(); }
     }
 
     // 存进「已发送」
@@ -274,7 +303,7 @@ async function api(request, env, url) {
          subject, snippet, attach_json, has_attach, size, seen, date)
        VALUES (?, ?, 'sent', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
     ).bind(
-      id, fromUser ? fromAddr : user.address, outId ? `<${String(outId).replace(/^<|>$/g, '')}>` : null, inReplyTo, references, fromAddr, fromUser?.name || '',
+      id, fromUser && user.is_admin ? fromAddr : user.address, outId ? `<${String(outId).replace(/^<|>$/g, '')}>` : null, inReplyTo, references, fromAddr, fromUser?.name || '',
       JSON.stringify(to.map((address) => ({ name: '', address }))),
       JSON.stringify([...cc, ...bcc].map((address) => ({ name: '', address }))),
       subject, snippetOf(text, ''), JSON.stringify(attach), attach.length ? 1 : 0, total, Date.now()
@@ -299,33 +328,12 @@ async function api(request, env, url) {
     return json({ ok: true });
   }
 
-  // ---- 管理员:邮箱账号管理 ----
+  const ex = await extra(path, method, request, env, user, url);
+  if (ex) return ex;
+
+  // ---- 管理员:发信设置 ----
   if (path.startsWith('/admin/')) {
     if (!user.is_admin) return err('需要管理员', 403);
-
-    if (path === '/admin/users' && method === 'GET') {
-      const r = await env.DB.prepare(
-        `SELECT u.id, u.address, u.name, u.is_admin, u.created_at,
-           (SELECT COUNT(*) FROM messages m WHERE m.mailbox = u.address) AS total
-         FROM users u ORDER BY u.address`
-      ).all();
-      return json({ items: r.results, domains: domainsOf(env), catch_all: env.CATCH_ALL || '' });
-    }
-
-    if (path === '/admin/users' && method === 'POST') {
-      const b = await request.json().catch(() => ({}));
-      const address = String(b.address || '').trim().toLowerCase();
-      if (!EMAIL_RE.test(address) || address.includes('+')) return err('地址格式不对');
-      if (!domainsOf(env).includes(address.split('@')[1])) return err(`只能用这些域名:${domainsOf(env).join(', ')}`);
-      if (String(b.password || '').length < 10) return err('密码至少 10 位');
-      try {
-        await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?)')
-          .bind(address, String(b.name || '').slice(0, 80), await hashPassword(b.password), b.is_admin ? 1 : 0, Date.now()).run();
-      } catch {
-        return err('这个地址已经存在');
-      }
-      return json({ ok: true });
-    }
 
     // 发信设置:Resend API Key 存在 settings 表;wrangler secret 里的 RESEND_API_KEY 优先
     if (path === '/admin/send' && method === 'GET') {
@@ -362,24 +370,6 @@ async function api(request, env, url) {
       return json({ ok: true, note });
     }
 
-    const um = path.match(/^\/admin\/users\/(\d+)(\/password)?$/);
-    if (um) {
-      const target = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(Number(um[1])).first();
-      if (!target) return err('没有这个账号', 404);
-      if (um[2] && method === 'POST') {
-        const { password } = await request.json().catch(() => ({}));
-        if (String(password || '').length < 10) return err('密码至少 10 位');
-        await env.DB.prepare('UPDATE users SET pass_hash = ?, session_ver = session_ver + 1 WHERE id = ?')
-          .bind(await hashPassword(password), target.id).run();
-        return json({ ok: true });
-      }
-      if (!um[2] && method === 'DELETE') {
-        if (target.id === user.id) return err('不能删除自己');
-        // 只删账号;信件保留,管理员仍可在邮箱列表里看到。之后发到这个地址的信会退回(或进 CATCH_ALL)
-        await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(target.id).run();
-        return json({ ok: true });
-      }
-    }
   }
 
   return err('not found', 404);
@@ -398,6 +388,8 @@ async function cleanupTrash(env) {
     }
   }
   await env.DB.prepare('DELETE FROM login_fail WHERE until < ?').bind(Date.now()).run();
+  await env.DB.prepare('DELETE FROM logs WHERE at < ?').bind(Date.now() - 90 * 86400000).run();
+  await env.DB.prepare('DELETE FROM autoreply_seen WHERE at < ?').bind(Date.now() - 7 * 86400000).run();
 }
 
 export default {
