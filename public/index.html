@@ -123,6 +123,14 @@
     </div>
   </form>
   <table class="users hidden" id="batchTable"><thead><tr><th>地址</th><th>密码</th><th>结果</th></tr></thead><tbody></tbody></table>
+  <h3>发信(Resend)</h3>
+  <p class="muted" id="sendStatus"></p>
+  <form id="resendForm" class="dlg-foot">
+    <input name="key" type="password" placeholder="re_ 开头的 API Key" autocomplete="off" style="flex:1">
+    <button type="submit" class="primary">保存</button>
+    <button type="button" id="resendClear">清除</button>
+  </form>
+  <p class="muted">没有 Key?到 resend.com 免费注册,添加你的域名并验证,再在 API Keys 里创建一个。免费每天 100 封、每月 3000 封。</p>
 </dialog>
 
 <div id="toast" class="toast"></div>

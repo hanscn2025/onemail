@@ -40,6 +40,8 @@ const SCHEMA = [
 
 let schemaReady = false;
 let cached = null;
+let cachedAt = 0;
+const CACHE_MS = 30_000; // 别的实例改了设置(比如填了发信 Key),最多 30 秒后这里也能读到
 
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -51,15 +53,16 @@ const splitDomains = (s) => String(s || '').split(',').map((x) => x.trim().toLow
 
 async function loadConfig(env) {
   await ensureSchema(env);
-  if (cached) return cached;
+  if (cached && Date.now() - cachedAt < CACHE_MS) return cached;
   const r = await env.DB.prepare('SELECT key, value FROM settings').all();
   const s = Object.fromEntries(r.results.map((x) => [x.key, x.value]));
   const cfg = {
     secret: env.SESSION_SECRET || s.secret || '',
     domains: env.DOMAINS !== undefined ? env.DOMAINS : s.domains || '',
     catchAll: env.CATCH_ALL !== undefined ? env.CATCH_ALL : s.catch_all || '',
+    resendKey: env.RESEND_API_KEY || s.resend_key || '',
   };
-  if (cfg.secret) cached = cfg; // 设置完成前不缓存,别的实例完成设置后这里能读到
+  if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存,别的实例完成设置后这里能读到
   return cfg;
 }
 
@@ -70,7 +73,20 @@ export async function withConfig(env) {
     SESSION_SECRET: { value: cfg.secret },
     DOMAINS: { value: cfg.domains },
     CATCH_ALL: { value: cfg.catchAll },
+    RESEND_API_KEY: { value: cfg.resendKey },
   });
+}
+
+export async function getSetting(env, key) {
+  const r = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(key).first();
+  return r ? r.value : null;
+}
+
+// value 为空就删除这项设置
+export async function saveSetting(env, key, value) {
+  if (value) await env.DB.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(key, value).run();
+  else await env.DB.prepare('DELETE FROM settings WHERE key = ?').bind(key).run();
+  cached = null;
 }
 
 export function isConfigured(env) {

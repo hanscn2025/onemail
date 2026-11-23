@@ -3,7 +3,7 @@ import {
   checkLocked, recordFail, clearFail,
 } from './auth.js';
 import { receive, sendOut, snippetOf, textToHtml } from './mail.js';
-import { withConfig, isConfigured, runSetup } from './config.js';
+import { withConfig, isConfigured, runSetup, getSetting, saveSetting } from './config.js';
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
@@ -87,7 +87,7 @@ async function api(request, env, url) {
   if (path === '/logout' && method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': clearCookie });
 
   if (path === '/me' && method === 'GET') {
-    const out = { address: user.address, name: user.name, is_admin: !!user.is_admin, domains: domainsOf(env) };
+    const out = { address: user.address, name: user.name, is_admin: !!user.is_admin, domains: domainsOf(env), can_send: !!(env.RESEND_API_KEY || env.EMAIL) };
     if (user.is_admin) {
       const r = await env.DB.prepare(
         `SELECT address FROM users UNION SELECT DISTINCT mailbox FROM messages ORDER BY 1`
@@ -325,6 +325,41 @@ async function api(request, env, url) {
         return err('这个地址已经存在');
       }
       return json({ ok: true });
+    }
+
+    // 发信设置:Resend API Key 存在 settings 表;wrangler secret 里的 RESEND_API_KEY 优先
+    if (path === '/admin/send' && method === 'GET') {
+      const raw = env.__raw || {};
+      const saved = await getSetting(env, 'resend_key');
+      const source = raw.RESEND_API_KEY ? 'secret' : saved ? 'settings' : raw.EMAIL ? 'cloudflare' : '';
+      const key = raw.RESEND_API_KEY || saved || '';
+      return json({ source, tail: key ? key.slice(-4) : '' });
+    }
+    if (path === '/admin/send' && method === 'POST') {
+      const { key } = await request.json().catch(() => ({}));
+      const k = String(key || '').trim();
+      if (!k) { await saveSetting(env, 'resend_key', null); return json({ ok: true, note: '已清除' }); }
+      if (!/^re_[A-Za-z0-9_-]{8,}$/.test(k)) return err('Key 格式不对,应该是 re_ 开头的一串字符');
+      // 用这个 Key 查一下 Resend 里的域名,顺便看域名有没有验证通过
+      let note = '已保存';
+      const r = await fetch('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${k}` } }).catch(() => null);
+      const j = r ? await r.json().catch(() => ({})) : {};
+      if (r && r.ok) {
+        const list = j.data || [];
+        const mine = domainsOf(env);
+        const hit = list.find((d) => mine.includes(String(d.name).toLowerCase()));
+        if (!hit) note = `已保存。但 Resend 里还没有添加 ${mine.join('、')},先去 Resend 添加域名,不然发不出去`;
+        else if (hit.status !== 'verified') note = `已保存。Resend 里的 ${hit.name} 状态是「${hit.status}」,等它变成 verified 才能发信`;
+        else note = `已保存,${hit.name} 已在 Resend 验证通过,可以发信了`;
+      } else if (r && /restricted/i.test(j.name || j.message || '')) {
+        note = '已保存(这个 Key 只有发信权限,没法检查域名状态)';
+      } else if (r && r.status >= 400 && r.status < 500) {
+        return err(`Resend 不认这个 Key:${j.message || r.status},请重新复制`);
+      } else if (!r || r.status >= 500) {
+        note = '已保存(暂时连不上 Resend,没检查 Key)';
+      }
+      await saveSetting(env, 'resend_key', k);
+      return json({ ok: true, note });
     }
 
     const um = path.match(/^\/admin\/users\/(\d+)(\/password)?$/);

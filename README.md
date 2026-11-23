@@ -7,7 +7,7 @@
 - `名字+任意内容@域名` 进同一个邮箱
 - 外部图片默认不加载(防追踪),信件 HTML 在沙盒里显示
 - 垃圾箱 30 天自动清空
-- 目前只能收信。发信需要 Workers 付费版或 Resend,见下文
+- 发信:接上免费的 Resend(每天 100 封)就能写信、回复、转发,还能用收信的那个地址回信
 
 ## 网页一键部署(不用命令行)
 
@@ -20,6 +20,7 @@
    **部署完马上做这一步**:设置页面只能用一次,谁先填谁就是管理员。
 3. Cloudflare 后台 → 你的域名 → 电子邮件 → 电子邮件路由:启用,然后把 Catch-all 的操作设成「发送到 Worker」,目标选 `onemail`,确认是启用状态。
 4. (可选)在 Worker 的「设置 → 域和路由」里加自定义域,比如 `mail.你的域名`。
+5. (可选)开通发信,见下文「开启发信」。
 
 注意:这个域名原来如果配过别的邮箱服务(企业邮箱等),开启电子邮件路由后原邮箱就收不到信了。
 
@@ -39,14 +40,15 @@
 
 ## 开启发信
 
-**方式 A:Cloudflare Email Sending**。需要 Workers 付费版。在 `wrangler.toml` 里加:
-```toml
-[[send_email]]
-name = "EMAIL"
-```
-重新部署,再在后台给域名开启 Email Sending,按提示加 DKIM 等 DNS 记录。
+不开通也能正常收信。想发信,用 Resend 的免费额度(每天 100 封、每月 3000 封):
 
-**方式 B:Resend**。在 resend.com 加域名、配好它给的 DNS 记录,然后在 Worker 的「设置 → 变量和机密」里加机密 `RESEND_API_KEY`。
+1. 到 [resend.com](https://resend.com) 免费注册,在 Domains 里添加你的域名。选自动配置 Cloudflare,它会帮你加好 DNS 记录;等状态变成 Verified。
+2. 在 API Keys 里创建一个 Key(Sending access 就够),复制下来。
+3. 用管理员登录邮箱 → 邮箱账号管理 → 发信(Resend),粘贴 Key 保存。页面会告诉你域名有没有验证通过。
+
+之后「写信」「回复」「转发」就能用了。也可以不在网页里填,改在 Worker 的「设置 → 变量和机密」里加机密 `RESEND_API_KEY`,它优先于网页里填的。
+
+另一种方式是 Cloudflare 自己的 Email Sending,需要 Workers 付费版:在 `wrangler.toml` 里加 `[[send_email]]`(`name = "EMAIL"`),重新部署后在后台给域名开启 Email Sending。
 
 ## 命令行部署和本机开发
 

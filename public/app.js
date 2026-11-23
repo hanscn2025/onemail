@@ -100,7 +100,7 @@ $('#menuBtn').onclick = () => $('#app').classList.toggle('menu');
 async function loadCounts() {
   const c = await api(withBox('/counts')).catch(() => ({}));
   $('[data-c="inbox"]').textContent = c.inbox || '';
-  document.title = c.inbox ? `(${c.inbox}) 邮箱` : '邮箱';
+  document.title = c.inbox ? `(${c.inbox}) OneMail` : 'OneMail';
 }
 
 async function loadList(more) {
@@ -246,6 +246,10 @@ function quote(m) {
 }
 
 function openCompose(kind, m) {
+  if (!state.me.can_send) {
+    toast(state.me.is_admin ? '还没开通发信:到「邮箱账号管理 → 发信」填 Resend Key' : '还没开通发信,请联系管理员');
+    return;
+  }
   cf.reset(); $('#fileNames').textContent = ''; $('#sendErr').textContent = '';
   cf.reply_to_id.value = '';
   const myBox = state.box || state.me.address;
@@ -311,7 +315,28 @@ $('#pwForm').onsubmit = async (e) => {
 };
 
 // ---------- 管理 ----------
-$('#adminLink').onclick = () => { $('#adminDlg').showModal(); loadUsers(); };
+$('#adminLink').onclick = () => { $('#adminDlg').showModal(); loadUsers(); loadSend(); };
+
+async function loadSend() {
+  const r = await api('/admin/send');
+  $('#sendStatus').textContent = {
+    secret: `已开通,用的是 Worker 机密里的 Key(…${r.tail}),这里改不了`,
+    settings: `已开通,Key 结尾 …${r.tail}`,
+    cloudflare: '用的是 Cloudflare 发信(需要 Workers 付费版)。填了 Resend Key 会改用 Resend',
+  }[r.source] || '还没开通。填一个 Resend API Key 就能发信';
+  $('#resendForm').classList.toggle('hidden', r.source === 'secret');
+  $('#resendClear').classList.toggle('hidden', r.source !== 'settings');
+}
+async function saveResend(key) {
+  try {
+    const r = await api('/admin/send', { method: 'POST', json: { key } });
+    $('#resendForm').reset(); toast(r.note);
+    state.me = await api('/me');
+    loadSend();
+  } catch (x) { toast(x.message); }
+}
+$('#resendForm').addEventListener('submit', (e) => { e.preventDefault(); const k = e.target.key.value.trim(); if (k) saveResend(k); });
+$('#resendClear').onclick = () => { if (confirm('清除后就不能发信了,确定吗?')) saveResend(''); };
 async function loadUsers() {
   const { items, domains, catch_all } = await api('/admin/users');
   $('#domainSuffix').textContent = '@' + domains[0];
