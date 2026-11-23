@@ -1,0 +1,29 @@
+# 网页一键部署用的配置。数据库和存储桶会在部署时自动创建。
+# 部署后打开 Worker 的网址,按页面提示填域名、建管理员。
+name = "cfmail"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# 垃圾箱里的信保留多少天
+TRASH_DAYS = "30"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cfmail"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "cfmail"
+
+[triggers]
+crons = ["17 3 * * *"]
+
+[observability]
+enabled = true

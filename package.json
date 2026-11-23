@@ -1,0 +1,16 @@
+{
+  "name": "cfmail",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "postal-mime": "^2.4.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.160.1"
+  },
+  "description": "部署在 Cloudflare 上的网页邮箱:一个域名,无数个邮箱"
+}

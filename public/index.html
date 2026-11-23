@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>邮箱</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='2' y='4' width='20' height='16' rx='3' fill='%232563eb'/><path d='M3 7l9 6 9-6' stroke='white' stroke-width='2' fill='none'/></svg>">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="login" class="login hidden">
+  <form id="loginForm" class="card">
+    <h1>登录邮箱</h1>
+    <label>邮箱地址<input name="address" type="email" autocomplete="username" required></label>
+    <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary" type="submit">登录</button>
+    <p class="error" id="loginErr"></p>
+  </form>
+</div>
+
+<div id="setup" class="login hidden">
+  <form id="setupForm" class="card">
+    <h1>首次设置</h1>
+    <p class="muted" style="margin:0">创建管理员邮箱。设置完成后这个页面就关闭了,只有你能登录。</p>
+    <label>你的域名<input name="domain" placeholder="example.com" autocomplete="off" autocapitalize="off" required></label>
+    <label>管理员用户名<div class="inline"><input name="user" value="admin" autocomplete="off" autocapitalize="off" required style="flex:1"><span class="muted" id="setupAt">@域名</span></div></label>
+    <label>密码(至少 10 位)<input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+    <label>再输一次密码<input name="password2" type="password" autocomplete="new-password" minlength="10" required></label>
+    <button class="primary" type="submit">完成设置</button>
+    <p class="error" id="setupErr"></p>
+  </form>
+</div>
+
+<div id="app" class="app hidden">
+  <aside class="side">
+    <div class="brand"><span class="logo"></span><span id="meAddr"></span></div>
+    <button class="primary compose-btn" id="composeBtn">写信</button>
+    <select id="boxSel" class="hidden" title="查看哪个邮箱"></select>
+    <nav id="folders">
+      <a data-f="inbox">收件箱<b data-c="inbox"></b></a>
+      <a data-f="starred">星标</a>
+      <a data-f="sent">已发送</a>
+      <a data-f="trash">垃圾箱</a>
+    </nav>
+    <div class="side-foot">
+      <a id="adminLink" class="hidden">邮箱账号管理</a>
+      <a id="settingsLink">设置</a>
+      <a id="logoutLink">退出登录</a>
+    </div>
+  </aside>
+
+  <section class="list">
+    <div class="list-head">
+      <button class="icon-btn mobile-only" id="menuBtn" aria-label="菜单">☰</button>
+      <input id="search" type="search" placeholder="搜索主题、发件人、内容">
+      <select id="rcptSel" class="rcpt-sel hidden" title="按收件地址筛选"></select>
+      <button class="icon-btn" id="refreshBtn" title="刷新" aria-label="刷新">↻</button>
+    </div>
+    <div id="items"></div>
+    <button id="moreBtn" class="more hidden">加载更多</button>
+  </section>
+
+  <main class="reader" id="reader">
+    <div class="empty">选一封信来看</div>
+  </main>
+</div>
+
+<dialog id="composeDlg" class="compose">
+  <form id="composeForm" method="dialog">
+    <div class="dlg-head"><strong id="composeTitle">写信</strong><button type="button" class="icon-btn" data-close aria-label="关闭">✕</button></div>
+    <label class="row hidden" id="fromRow">发件人<select name="from" id="fromSel"></select></label>
+    <label class="row">收件人<input name="to" placeholder="多个地址用逗号分开" required></label>
+    <label class="row">抄送<input name="cc"></label>
+    <label class="row">密送<input name="bcc"></label>
+    <label class="row">主题<input name="subject"></label>
+    <textarea name="text" rows="14"></textarea>
+    <input type="hidden" name="reply_to_id">
+    <div class="dlg-foot">
+      <label class="file-btn">添加附件<input type="file" name="files" multiple hidden></label>
+      <span id="fileNames" class="muted"></span>
+      <span class="spacer"></span>
+      <span class="error" id="sendErr"></span>
+      <button class="primary" type="submit" id="sendBtn">发送</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settingsDlg">
+  <div class="dlg-head"><strong>设置</strong><button type="button" class="icon-btn" data-close aria-label="关闭">✕</button></div>
+  <form id="nameForm" class="stack">
+    <label>显示名称(发信时对方看到的名字)<input name="dname"></label>
+    <button type="submit">保存名称</button>
+  </form>
+  <hr>
+  <form id="pwForm" class="stack">
+    <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
+    <label>新密码(至少 10 位)<input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+    <button type="submit">修改密码</button>
+  </form>
+  <p class="muted" id="settingsMsg"></p>
+</dialog>
+
+<dialog id="adminDlg" class="wide">
+  <div class="dlg-head"><strong>邮箱账号管理</strong><button type="button" class="icon-btn" data-close aria-label="关闭">✕</button></div>
+  <table class="users"><thead><tr><th>地址</th><th>名称</th><th>信件</th><th></th></tr></thead><tbody id="userRows"></tbody></table>
+  <h3>新建邮箱</h3>
+  <form id="newUserForm" class="grid">
+    <input name="local" placeholder="用户名" required><span id="domainSuffix"></span>
+    <input name="dname" placeholder="显示名称(可选)">
+    <input name="password" type="password" placeholder="密码(至少 10 位)" minlength="10" autocomplete="new-password" required>
+    <label class="inline"><input type="checkbox" name="is_admin"> 管理员</label>
+    <button type="submit" class="primary">创建</button>
+  </form>
+  <p class="muted" id="adminMsg"></p>
+  <h3>批量创建</h3>
+  <form id="batchForm" class="stack">
+    <textarea name="lines" rows="6" placeholder="每行一个账号,格式:用户名[,密码][,显示名称]&#10;不写密码会自动生成&#10;例如:&#10;alice&#10;bob,MyPassword123,Bob Li&#10;carol,,Carol"></textarea>
+    <div class="dlg-foot">
+      <span class="muted" id="batchMsg"></span><span class="spacer"></span>
+      <button type="button" id="batchCsv" class="hidden">下载结果 CSV</button>
+      <button type="submit" class="primary" id="batchBtn">批量创建</button>
+    </div>
+  </form>
+  <table class="users hidden" id="batchTable"><thead><tr><th>地址</th><th>密码</th><th>结果</th></tr></thead><tbody></tbody></table>
+</dialog>
+
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>
