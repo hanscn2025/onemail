@@ -446,6 +446,47 @@ function editDialog(title, fields, onSave, saveText = '保存') {
 
 const FWD_HINT = '外部邮箱要先在 Cloudflare 后台「电子邮件 → 电子邮件路由 → 目标地址」里添加并点验证邮件,转发才会成功。';
 
+// ---------- 临时邮箱收件地址(设置页和临时邮箱页共用) ----------
+// r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
+function tempTargetPanel(r) {
+  const custom = !!r.catch_all_fwd;
+  const box = r.catch_all || state.me.address;
+  return `<form class="panel" data-target>
+    <div class="sec-head"><h2>临时邮箱收件地址 <span class="muted sm">任意前缀@${esc((state.me.domains || [])[0] || '')} 收到的信送到哪</span></h2></div>
+    <div class="choice">
+      <label class="radio-card"><input type="radio" name="mode" value="admin" ${custom ? '' : 'checked'}>
+        <span><strong>管理员邮箱</strong><span class="muted sm">默认。信存进 ${esc(box)},登录这里查看</span></span></label>
+      <label class="radio-card"><input type="radio" name="mode" value="custom" ${custom ? 'checked' : ''}>
+        <span><strong>自定义邮箱</strong><span class="muted sm">送到你的 Gmail、QQ 邮箱等,在那边查看</span></span></label>
+    </div>
+    <div data-custom class="stack ${custom ? '' : 'hidden'}">
+      <label>收件邮箱<input name="fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="例如 you@gmail.com"></label>
+      <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}>
+        管理员邮箱里也保留一份<span class="muted sm">(方便用临时地址回信${r.locked ? ';这一项写在部署配置里,改不了' : ''})</span></label>
+      <div class="hint"><strong>第一次用要验证这个邮箱:</strong>Cloudflare 后台 → 你的域名 → 电子邮件 → 电子邮件路由 → 目标地址 → 添加地址,填上面的邮箱,然后去那个邮箱点验证链接。验证前信转不过去,失败会记在管理后台的记录里。</div>
+    </div>
+    <div class="actions"><button class="primary" type="submit">保存</button></div>
+  </form>`;
+}
+
+function wireTempTarget(form, r, after) {
+  const sync = () => $('[data-custom]', form).classList.toggle('hidden', form.mode.value !== 'custom');
+  $$('[name=mode]', form).forEach((x) => (x.onchange = sync));
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const box = r.catch_all || state.me.address;
+    let j;
+    if (form.mode.value === 'admin') j = { catch_all: box, catch_all_fwd: '' };
+    else {
+      const fwd = form.fwd.value.trim();
+      if (!fwd) { toast('请填收件邮箱'); form.fwd.focus(); return; }
+      j = { catch_all_fwd: fwd, catch_all: form.keep.checked ? box : '' };
+    }
+    if (r.locked) delete j.catch_all;
+    try { await api('/admin/routing', { method: 'POST', json: j }); toast('已保存,最多 30 秒后生效'); if (after) await after(); } catch (x) { toast(x.message); }
+  };
+}
+
 // ---------- 临时邮箱 ----------
 // 默认规则(=兜底规则)当前送到哪,用来显示自动地址的去向
 let tempDefaults = null;
@@ -556,17 +597,7 @@ async function pageTemp() {
   page.innerHTML = `${head('临时邮箱', `随便写一个前缀 <code>任意名字@${esc(domain)}</code> 就能收信,不用提前建。收到第一封信后,地址会自动出现在下面。`,
     `<button class="primary" id="newTemp">${icon('plus')}新建</button>`)}
   <div class="page-body">
-    ${d ? `<form class="panel" id="defForm">
-      <div class="sec-head"><h2>默认规则 <span class="muted sm">所有没单独设置的前缀</span></h2></div>
-      <div class="def-grid">
-        <label class="check"><input type="checkbox" name="store" ${d.box ? 'checked' : ''} ${d.locked ? 'disabled' : ''}> 存进${d.box && d.box !== state.me.address ? ' ' + esc(d.box) + ' ' : '我的'}邮箱
-          ${d.locked ? '<span class="muted sm">(写在部署配置里,这里改不了)</span>' : ''}</label>
-        <label>同时转发到我的其他邮箱<span class="muted sm">比如 Gmail、QQ 邮箱。留空表示不转发</span>
-          <input name="fwd" type="email" value="${esc(d.fwd)}" placeholder="you@gmail.com"></label>
-      </div>
-      <p class="hint">${FWD_HINT} 这样用起来就像 Gmail 的临时邮箱:注册网站时随便写一个前缀,信直接到你的 Gmail;哪个前缀开始收垃圾邮件,就在下面把它停用。</p>
-      <div class="actions"><button class="primary" type="submit">保存默认规则</button></div>
-    </form>` : ''}
+    ${d ? tempTargetPanel({ catch_all: d.box, catch_all_fwd: d.fwd, locked: d.locked }) : ''}
     <section class="panel">
       <div class="sec-head"><h2>${all ? '所有人的临时地址' : '我的临时地址'} <span class="count">${items.length}</span>${autoN ? `<span class="muted sm">其中 ${autoN} 个是自动出现的</span>` : ''}</h2>
         <div class="tools">
@@ -580,18 +611,13 @@ async function pageTemp() {
   $('#newTemp').onclick = () => newTempDialog(domain);
   if ($('#tempAll')) $('#tempAll').onchange = (e) => { state.tempAll = e.target.checked; pageTemp(); };
   $('#tempQ').oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.temp-rows tr', page).forEach((tr) => (tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none')); };
-  if ($('#defForm')) $('#defForm').onsubmit = async (e) => {
-    e.preventDefault();
-    const f = e.target, j = { catch_all_fwd: f.fwd.value.trim() };
-    if (!d.locked) j.catch_all = f.store.checked ? (d.box || state.me.address) : '';
-    if (!d.locked && !f.store.checked && !j.catch_all_fwd && !confirm('既不存进邮箱也不转发,没单独设置的前缀收到的信都会被退回。确定吗?')) return;
-    try { await api('/admin/routing', { method: 'POST', json: j }); toast('已保存,最多 30 秒后生效'); await pageTemp(); } catch (x) { toast(x.message); }
-  };
+  if (d) wireTempTarget($('[data-target]', page), { catch_all: d.box, catch_all_fwd: d.fwd, locked: d.locked }, pageTemp);
 }
 
 // ---------- 个人设置 ----------
 async function pageSettings() {
   const s = await api('/settings');
+  const route = state.me.is_admin ? await api('/admin/routing') : null;
   const pct = s.quota_mb ? Math.min(100, (s.used / (s.quota_mb * 1048576)) * 100) : 0;
   page.innerHTML = `${head('设置', esc(state.me.address))}
   <div class="page-body narrow">
@@ -603,6 +629,7 @@ async function pageSettings() {
         <div><div class="muted sm">最近 24 小时发信</div><div class="big">${s.sent_24h}<span class="muted"> / ${s.send_limit ? s.send_limit + ' 封' : '不限'}</span></div></div>
       </div>
     </section>
+    ${route ? tempTargetPanel(route) : ''}
     <form class="panel" data-sec>
       <h2>个人资料</h2>
       <label>显示名称<span class="muted sm">发信时对方看到的名字</span><input name="name" value="${esc(s.name)}" maxlength="80"></label>
@@ -632,6 +659,7 @@ async function pageSettings() {
     </form>
   </div>`;
   wire();
+  if (route) wireTempTarget($('[data-target]', page), route, pageSettings);
   $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(form), j = {};
