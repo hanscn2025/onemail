@@ -546,3 +546,13 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
   .table-wrap { overflow: visible; }
   .toast { left: 16px; right: 16px; bottom: 16px; max-width: none; }
 }
+
+/* 品牌 Logo */
+.logo.has-img { background: none; overflow: hidden; }
+.logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.logo-edit { display: flex; gap: 20px; align-items: center; }
+.logo-lg { width: 72px; height: 72px; border-radius: 16px; }
+.logo-lg svg { width: 36px; height: 36px; }
+.logo-lg.has-img { background: var(--row-read); }
+.file-btn.bordered { border: 1px solid var(--line); }
+.panel label.file-btn { display: inline-flex; gap: 6px; }

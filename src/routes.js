@@ -47,6 +47,30 @@ export async function fromAddresses(env, user) {
 
 const addrRow = (a) => ({ ...a, members: JSON.parse(a.members || '[]') });
 
+// ---------- 品牌(系统名称、Logo):不用登录就能读,登录页也要显示 ----------
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
+export async function brandRoutes(path, method, env, url) {
+  if (path === '/brand' && method === 'GET') {
+    const name = (await getSetting(env, 'brand_name')) || 'OneMail';
+    const ver = await getSetting(env, 'brand_logo_ver');
+    return json({ name, logo: ver ? `/api/brand/logo?v=${ver}` : '' });
+  }
+  if (path === '/brand/logo' && method === 'GET') {
+    const obj = await env.BUCKET.get('brand/logo');
+    if (!obj) return err('没有 Logo', 404);
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType || 'image/png',
+        'Cache-Control': url.searchParams.get('v') ? 'public, max-age=31536000, immutable' : 'no-cache',
+        // SVG 也可能带脚本:单独打开时不让它运行
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  }
+  return null;
+}
+
 // 升级前用过的前缀(收过信但没登记的地址)补登记成自动临时地址,只做一次
 async function backfillAuto(env) {
   // 以前单独设过去向的临时地址:管理员的改成跟随全局设置,普通账号的改成进自己邮箱
@@ -358,6 +382,29 @@ export async function extra(path, method, request, env, user, url) {
       const f = checkFwd(env, b.catch_all_fwd); if (f.error) return err(f.error);
       await saveSetting(env, 'catch_all_fwd', f.value);
     }
+    return json({ ok: true });
+  }
+
+  // ---------- 品牌 ----------
+  if (path === '/admin/brand' && method === 'POST') {
+    const b = await body(request);
+    const name = clean(b.name, 40);
+    await saveSetting(env, 'brand_name', name || null);
+    return json({ ok: true });
+  }
+  if (path === '/admin/brand/logo' && method === 'POST') {
+    const fd = await request.formData();
+    const f = fd.get('logo');
+    if (!f || typeof f === 'string' || !f.size) return err('请选择图片');
+    if (!LOGO_TYPES.includes(f.type)) return err('只支持 PNG、JPG、WebP、GIF、SVG 图片');
+    if (f.size > 512 * 1024) return err('图片不能超过 512KB');
+    await env.BUCKET.put('brand/logo', await f.arrayBuffer(), { httpMetadata: { contentType: f.type } });
+    await saveSetting(env, 'brand_logo_ver', String(Date.now()));
+    return json({ ok: true });
+  }
+  if (path === '/admin/brand/logo' && method === 'DELETE') {
+    await env.BUCKET.delete('brand/logo');
+    await saveSetting(env, 'brand_logo_ver', null);
     return json({ ok: true });
   }
 

@@ -3,7 +3,7 @@ import {
   checkLocked, recordFail, clearFail,
 } from './auth.js';
 import { receive, sendOut, snippetOf, textToHtml, addLog } from './mail.js';
-import { extra, fromAddresses } from './routes.js';
+import { extra, fromAddresses, brandRoutes } from './routes.js';
 import { withConfig, isConfigured, runSetup, getSetting, saveSetting } from './config.js';
 
 const json = (data, status = 200, headers = {}) =>
@@ -51,6 +51,9 @@ async function api(request, env, url) {
 
   // 改动类请求必须带这个头;跨站页面不能随便加自定义头,用来挡 CSRF
   if (method !== 'GET' && request.headers.get('X-Mail') !== '1') return err('bad request', 403);
+
+  const br = await brandRoutes(path, method, env, url);
+  if (br) return br;
 
   // 首次设置:还没有任何账号时,网页上先创建管理员
   if (path === '/setup') {

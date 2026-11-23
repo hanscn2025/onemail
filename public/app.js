@@ -39,6 +39,8 @@ const ICONS = {
   route: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   at: '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
 };
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 const fillIcons = (root = document) => $$('i[data-i]', root).forEach((el) => { el.outerHTML = icon(el.dataset.i); });
@@ -51,6 +53,24 @@ function avatar(name, addr) {
   let h = 0; for (const c of String(addr || name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return `<span class="avatar" style="--av:${AV_COLORS[h % AV_COLORS.length]}">${esc(ch)}</span>`;
 }
+// ---------- 品牌 ----------
+const DEFAULT_LOGO = document.querySelector('.logo')?.innerHTML || '';
+const DEFAULT_ICON = document.querySelector('link[rel=icon]')?.href || '';
+function applyBrand(b) {
+  state.brand = b;
+  const name = b.name || 'OneMail';
+  $$('.brand-name, .card-brand span').forEach((el) => (el.textContent = name));
+  $('#loginForm h1').textContent = `登录 ${name}`;
+  $$('.logo').forEach((el) => {
+    el.classList.toggle('has-img', !!b.logo);
+    el.innerHTML = b.logo ? `<img src="${esc(b.logo)}" alt="">` : DEFAULT_LOGO;
+  });
+  const link = document.querySelector('link[rel=icon]');
+  if (link) link.href = b.logo || DEFAULT_ICON;
+  document.title = name;
+}
+const brandName = () => (state.brand && state.brand.name) || 'OneMail';
+
 const FOLDER_NAMES = { inbox: '收件箱', starred: '星标', sent: '已发送', drafts: '草稿', trash: '垃圾箱' };
 
 const state = { me: null, folder: 'inbox', box: '', q: '', rcpt: '', items: [], cur: null, done: false };
@@ -158,7 +178,7 @@ document.addEventListener('click', (e) => { if (!e.target.closest('.me-wrap')) $
 async function loadCounts() {
   const c = await api(withBox('/counts')).catch(() => ({}));
   $('[data-c="inbox"]').textContent = c.inbox || '';
-  document.title = c.inbox ? `(${c.inbox}) OneMail` : 'OneMail';
+  document.title = c.inbox ? `(${c.inbox}) ${brandName()}` : brandName();
 }
 
 async function loadList(more) {
@@ -685,7 +705,7 @@ async function pageSettings() {
 // ---------- 管理后台 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号', 'users'], ['addresses', '别名和群组', 'at'],
-  ['temps', '临时地址', 'shuffle'], ['send', '发信', 'send'], ['logs', '记录', 'list'],
+  ['temps', '临时地址', 'shuffle'], ['brand', '品牌', 'image'], ['send', '发信', 'send'], ['logs', '记录', 'list'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -873,6 +893,49 @@ const ADMIN = {
     el.innerHTML = `<section class="panel"><div class="sec-head"><h2>所有人的临时地址 <span class="count">${items.length}</span></h2></div>${tempRows(items, true, () => ADMIN.temps(el))}</section>`;
   },
 
+  async brand(el) {
+    const b = await api('/brand');
+    el.innerHTML = `<div class="narrow-col">
+      <form class="panel" id="brandName">
+        <h2>系统名称</h2>
+        <label>名称<span class="muted sm">显示在左上角、登录页和浏览器标签上,比如公司名「某某科技邮箱」</span>
+          <input name="name" value="${esc(b.name)}" maxlength="40" placeholder="OneMail"></label>
+        <div class="actions"><button class="primary" type="submit">保存</button></div>
+      </form>
+      <section class="panel">
+        <h2>Logo</h2>
+        <div class="logo-edit">
+          <span class="logo logo-lg ${b.logo ? 'has-img' : ''}">${b.logo ? `<img src="${esc(b.logo)}" alt="">` : DEFAULT_LOGO}</span>
+          <div class="stack">
+            <p class="muted sm" style="margin:0">建议用正方形图片,256×256 像素左右,PNG 或 SVG,不超过 512KB。透明背景效果最好。</p>
+            <div class="tools">
+              <label class="file-btn bordered">${icon('upload')}上传图片<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
+              ${b.logo ? '<button type="button" id="logoDel">恢复默认</button>' : ''}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>`;
+    const refresh = async () => { applyBrand(await api('/brand')); await ADMIN.brand(el); };
+    $('#brandName').onsubmit = async (e) => {
+      e.preventDefault();
+      try { await api('/admin/brand', { method: 'POST', json: { name: e.target.name.value.trim() } }); toast('已保存'); await refresh(); } catch (x) { toast(x.message); }
+    };
+    $('#logoFile').onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const fd = new FormData(); fd.append('logo', f);
+      try {
+        const r = await fetch('/api/admin/brand/logo', { method: 'POST', body: fd, headers: { 'X-Mail': '1' } });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || '上传失败');
+        toast('Logo 已更新'); await refresh();
+      } catch (x) { toast(x.message); }
+    };
+    if ($('#logoDel')) $('#logoDel').onclick = async () => {
+      try { await api('/admin/brand/logo', { method: 'DELETE' }); toast('已恢复默认 Logo'); await refresh(); } catch (x) { toast(x.message); }
+    };
+  },
+
   async send(el) {
     const r = await api('/admin/send');
     const status = {
@@ -969,4 +1032,4 @@ window.addEventListener('hashchange', () => {
 });
 
 fillIcons();
-boot();
+api('/brand').then(applyBrand).catch(() => {}).finally(boot);
