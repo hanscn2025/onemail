@@ -68,3 +68,7 @@ curl -X POST 'http://127.0.0.1:8788/cdn-cgi/handler/email?from=a@x.com&to=bob@ex
 ONEMAIL_PASSWORD='新密码' node scripts/create-user.mjs someone@example.com [--admin] > u.sql
 npx wrangler d1 execute DB --remote --file u.sql -y && rm u.sql
 ```
+
+## 许可证
+
+MIT,见 [LICENSE](LICENSE)。
