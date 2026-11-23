@@ -72,6 +72,22 @@ Cloudflare 后台 → 你的域名 → 电子邮件 → 电子邮件路由 → �
 
 另一种方式是 Cloudflare 自己的 Email Sending,需要 Workers 付费版:在 `wrangler.toml` 里加 `[[send_email]]`(`name = "EMAIL"`),重新部署后在后台给域名开启 Email Sending。
 
+## 在 Foxmail / Outlook 里使用
+
+Cloudflare Workers 不能提供 IMAP/POP3 服务,所以客户端不能直接登录这个邮箱。可以这样用:
+
+- **收信**:在「设置 → 转发到外部邮箱」填 QQ 邮箱或 Gmail,在客户端里添加那个邮箱。
+- **发信**:在客户端里加一个 SMTP 发件服务器,用 `你@你的域名` 的身份发信:
+
+| 项目 | 填写 |
+|---|---|
+| 服务器 | `smtp.resend.com` |
+| 端口 | `465`(SSL/TLS),连不上时用 `587`(STARTTLS) |
+| 用户名 | `resend` |
+| 密码 | Resend API Key,建议每人单独建一个 Sending access 的 Key |
+
+从客户端发出的信不会出现在网页版的「已发送」里。登录后在「设置」页底部有完整步骤。
+
 ## 命令行部署和本机开发
 
 ```bash

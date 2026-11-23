@@ -74,6 +74,22 @@ Compose, reply and forward then work. Instead of the web page, you can also add 
 
 Alternatively, use Cloudflare's own Email Sending, which requires the Workers Paid plan: add `[[send_email]]` (`name = "EMAIL"`) to `wrangler.toml`, redeploy, then enable Email Sending for the domain in the dashboard.
 
+## Using Foxmail / Outlook
+
+Cloudflare Workers can't serve IMAP/POP3, so desktop clients can't log in directly. Instead:
+
+- **Receive**: set *Settings → Forward to external mailbox* to Gmail/QQ and add that account to your client.
+- **Send**: add an SMTP server in your client and send as `you@your-domain`:
+
+| Field | Value |
+|---|---|
+| Server | `smtp.resend.com` |
+| Port | `465` (SSL/TLS), or `587` (STARTTLS) |
+| Username | `resend` |
+| Password | a Resend API key — create one per person with *Sending access* |
+
+Mail sent from a client won't show up in the web app's *Sent* folder. Full steps are at the bottom of the Settings page.
+
 ## CLI deploy and local development
 
 ```bash

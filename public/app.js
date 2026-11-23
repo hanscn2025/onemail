@@ -636,6 +636,41 @@ async function pageTemp() {
   if ($('[data-go-settings]', page)) $('[data-go-settings]', page).onclick = () => openPage('settings');
 }
 
+// ---------- 在 Foxmail / Outlook 里使用 ----------
+// Cloudflare Workers 开不了 IMAP/POP3 服务,所以客户端收信靠「转发到外部邮箱」,发信走 Resend 的 SMTP
+function clientPanel() {
+  const me = state.me;
+  const row = (k, v, copy = true) => `<tr><td class="muted nowrap">${k}</td><td><div class="addr-cell"><code>${esc(v)}</code>${copy ? `<button class="icon-btn xs" type="button" data-copy="${esc(v)}" title="复制">${icon('copy')}</button>` : ''}</div></td></tr>`;
+  const pass = me.is_admin
+    ? `在 Resend 后台 API Keys 里新建一个 Key 当密码。建议每个人、每台设备单独建一个,权限选 Sending access、域名只选 <code>${esc((me.domains || [])[0] || '')}</code>,丢了可以单独删掉`
+    : '找管理员要一个 Resend API Key 当密码(re_ 开头)';
+  return `<section class="panel">
+    <h2>在 Foxmail / Outlook 里使用 <span class="muted sm">用电脑、手机上的邮件客户端收发这个邮箱</span></h2>
+    <p class="hint">这个邮箱跑在 Cloudflare 上,没有 IMAP/POP3 收信服务,客户端不能直接登录。办法是:<strong>收信</strong>转发到 QQ、Gmail 等外部邮箱,在客户端里添加那个邮箱;<strong>发信</strong>在客户端里加一个 SMTP 发件服务器,用 ${esc(me.address)} 的身份发出去。</p>
+    <h3>第 1 步 · 收信</h3>
+    <ol class="steps">
+      <li>在上面「转发到外部邮箱」填你的 QQ 邮箱或 Gmail${me.fwd_to ? `(现在转发到 <code>${esc(me.fwd_to)}</code>)` : ''}。想网页版里也留一份,就勾上「转发后在这里也保留一份」。</li>
+      <li>在 Foxmail / Outlook 里按平常的方法添加那个 QQ 或 Gmail 账号,发到 ${esc(me.address)} 的信就会出现在里面。</li>
+    </ol>
+    <h3>第 2 步 · 用 ${esc(me.address)} 发信</h3>
+    ${me.can_send ? '' : `<p class="hint">系统还没开通发信${me.is_admin ? `,先去 <a data-goto-send>管理后台 → 发信</a> 填 Resend Key` : ',请联系管理员'}。</p>`}
+    <div class="table-wrap"><table class="tbl mini"><tbody>
+      ${row('发件服务器(SMTP)', 'smtp.resend.com')}
+      ${row('端口', '465')}
+      ${row('加密方式', 'SSL/TLS', false)}
+      ${row('用户名', 'resend')}
+      <tr><td class="muted nowrap">密码</td><td class="sm">${pass}</td></tr>
+      ${row('发件人地址', me.address)}
+    </tbody></table></div>
+    <ol class="steps">
+      <li><strong>Foxmail</strong>:在收 QQ/Gmail 的那个账号里,设置 → 账号 → 发件人身份(或「其他邮箱」)新增 ${esc(me.address)},发件服务器填上面的参数。写信时在「发件人」里选它。</li>
+      <li><strong>Outlook</strong>:文件 → 账户设置 → 新建,选「手动设置 → POP 或 IMAP」,电子邮件填 ${esc(me.address)},接收服务器可以填 QQ/Gmail 的,发送服务器填上面的参数。</li>
+      <li>465 端口连不上时,换 587,加密方式选 STARTTLS。</li>
+    </ol>
+    <p class="hint">注意:从客户端发出的信不经过这个网页,所以不会出现在这里的「已发送」里,也不计入每天的发信上限。</p>
+  </section>`;
+}
+
 // ---------- 个人设置 ----------
 async function pageSettings() {
   const s = await api('/settings');
@@ -673,6 +708,7 @@ async function pageSettings() {
       <p class="hint">${FWD_HINT}</p>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>
+    ${clientPanel()}
     <form class="panel" id="pwForm2">
       <h2>修改密码</h2>
       <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
@@ -681,6 +717,8 @@ async function pageSettings() {
     </form>
   </div>`;
   wire();
+  $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
+  if ($('[data-goto-send]', page)) $('[data-goto-send]', page).onclick = () => openPage('admin/send');
   if (route) wireTempTarget($('[data-target]', page), route, pageSettings);
   $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
     e.preventDefault();

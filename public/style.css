@@ -318,6 +318,7 @@ button:disabled { opacity: .6; cursor: default; }
 .panel .actions { justify-content: flex-start; }
 .hint { margin: 0; font-size: 12.5px; color: var(--muted); background: var(--row-read); border-radius: 8px; padding: 10px 14px; line-height: 1.6; }
 .hint strong { color: var(--text-2); }
+.hint a { color: var(--accent-ink); cursor: pointer; font-weight: 500; }
 .addr-input { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
 .addr-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .addr-input input { border: none; box-shadow: none !important; flex: 1; min-width: 0; font-family: var(--mono); font-size: 13px; }
