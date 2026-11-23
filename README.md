@@ -1,6 +1,6 @@
-# cfmail:Cloudflare 上的网页邮箱
+# OneMail:一个域名,无数个邮箱
 
-一个域名,无数个邮箱。发给 `任意名字@你的域名` 的信都会进你的网页邮箱,不用服务器,个人使用在 Cloudflare 免费额度内。
+部署在 Cloudflare 上的网页邮箱。发给 `任意名字@你的域名` 的信都会进你的网页邮箱,不用服务器,个人使用在 Cloudflare 免费额度内。
 
 - 任意地址收信:没建过的地址也能收,列表里标出每封信是发给哪个地址的,可以按地址筛选
 - 多个独立邮箱:给家人、同事建账号,各自登录,只看得到自己的信;支持批量创建
@@ -11,14 +11,14 @@
 
 ## 网页一键部署(不用命令行)
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hanscn2025/cfmail)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/hanscn2025/onemail)
 
 前提:你的域名已经接入 Cloudflare。
 
 1. 点上面的按钮,登录 Cloudflare、连接 GitHub,部署页面用默认值,点创建并部署。数据库(D1)和存储桶(R2)会自动建好。
 2. 部署完成后打开 `xxx.workers.dev` 网址,在「首次设置」页面填你的域名、管理员用户名和密码。
    **部署完马上做这一步**:设置页面只能用一次,谁先填谁就是管理员。
-3. Cloudflare 后台 → 你的域名 → 电子邮件 → 电子邮件路由:启用,然后把 Catch-all 的操作设成「发送到 Worker」,目标选 `cfmail`,确认是启用状态。
+3. Cloudflare 后台 → 你的域名 → 电子邮件 → 电子邮件路由:启用,然后把 Catch-all 的操作设成「发送到 Worker」,目标选 `onemail`,确认是启用状态。
 4. (可选)在 Worker 的「设置 → 域和路由」里加自定义域,比如 `mail.你的域名`。
 
 注意:这个域名原来如果配过别的邮箱服务(企业邮箱等),开启电子邮件路由后原邮箱就收不到信了。
@@ -65,6 +65,6 @@ curl -X POST 'http://127.0.0.1:8788/cdn-cgi/handler/email?from=a@x.com&to=bob@ex
 
 命令行建账号或重设密码:
 ```bash
-CFMAIL_PASSWORD='新密码' node scripts/create-user.mjs someone@example.com [--admin] > u.sql
+ONEMAIL_PASSWORD='新密码' node scripts/create-user.mjs someone@example.com [--admin] > u.sql
 npx wrangler d1 execute DB --remote --file u.sql -y && rm u.sql
 ```
