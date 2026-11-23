@@ -592,13 +592,14 @@ async function pageTemp() {
   tempDefaults = defaults || null;
   const d = defaults;
   page.innerHTML = `${head('临时邮箱', `随便写一个前缀 <code>任意名字@${esc(domain)}</code> 就能收信,不用提前建。收到第一封信后,地址会自动出现在下面。`,
-    `<button class="primary" id="newTemp">${icon('plus')}新建</button>`)}
+)}
   <div class="page-body">
     <div class="dest-note">${icon('route')}<span>${TEMP_DEST_TEXT()}</span>${state.me.is_admin ? '<a data-go-settings>去设置修改</a>' : ''}</div>
     <section class="panel">
       <div class="sec-head"><h2>${all ? '所有人的临时地址' : '我的临时地址'} <span class="count">${items.length}</span></h2>
         <div class="tools">
           <div class="search sm-search">${icon('search')}<input id="tempQ" type="search" placeholder="搜索地址或备注"></div>
+          <button class="primary" id="newTemp">${icon('plus')}新建临时地址</button>
           ${state.me.is_admin ? `<label class="check sm"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
         </div></div>
       ${tempRows(items, all, pageTemp)}
