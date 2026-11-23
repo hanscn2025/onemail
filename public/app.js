@@ -499,18 +499,28 @@ function defaultChips() {
   return parts.join('') || '<span class="chip">退回</span>';
 }
 
+function TEMP_DEST_TEXT() {
+  if (!state.me.is_admin) return '临时地址收到的信进你的邮箱;要转发到外部邮箱,请联系管理员。';
+  const d = tempDefaults || {};
+  const parts = [];
+  if (d.box) parts.push(d.box === state.me.address ? '存进管理员邮箱' : `存进 ${esc(d.box)}`);
+  if (d.fwd) parts.push(`转发到 ${esc(d.fwd)}`);
+  return `收到的信现在会${parts.join(',同时') || '被退回'}。这是全局设置,在「设置 → 临时邮箱收件地址」统一修改。`;
+}
+const TEMP_DEST_NOTE = () => `<p class="hint">${TEMP_DEST_TEXT()}</p>`;
+
 function tempRows(items, showOwner, reload) {
   if (!items.length) return `<div class="empty small">${icon('shuffle')}<p>还没有临时地址。随便写一个前缀去注册网站,收到第一封信后它就会出现在这里</p></div>`;
   const now = Date.now();
   const rows = items.map((a) => {
     const expired = a.expires_at && a.expires_at < now;
     const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : badge('ok', '使用中');
-    const to = a.auto ? defaultChips() : [a.deliver ? `<span class="chip">${icon('inbox', 'sm')}${showOwner || a.owner !== state.me.address ? esc(a.owner || '') : '我的邮箱'}</span>` : '', a.fwd_to ? `<span class="chip">${icon('forward', 'sm')}${esc(a.fwd_to)}</span>` : ''].join('');
+    const to = a.auto ? defaultChips() : `<span class="chip">${icon('inbox', 'sm')}${a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '')}</span>`;
     const exp = a.expires_at ? (expired ? '已过期' : `${fmtDay(a.expires_at)} 到期`) : '永久';
     return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to).toLowerCase())}">
-      <td><div class="addr-cell"><code>${esc(a.address)}</code><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button>${a.auto ? badge('neutral', '自动') : ''}</div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
+      <td><div class="addr-cell"><code>${esc(a.address)}</code><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
-      <td><div class="chips">${to}</div>${a.auto ? '<div class="muted sm">跟随默认规则</div>' : ''}</td>
+      <td><div class="chips">${to}</div>${a.auto ? '<div class="muted sm">按全局设置</div>' : ''}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
       <td class="acts">
@@ -542,31 +552,21 @@ function wireTemp(items, reload) {
   }));
   $$('[data-tedit]', page).forEach((b) => (b.onclick = () => {
     const a = items.find((x) => x.address === b.dataset.tedit);
-    const boxName = !a.owner || a.owner === state.me.address ? '我的' : esc(a.owner) + ' 的';
-    editDialog(`设置 ${a.address}`, `
+    editDialog(`编辑 ${a.address}`, `
       <label>备注<input name="note" value="${esc(a.note)}" placeholder="例如:哪个网站用的"></label>
-      ${a.auto || tempDefaults ? `<label class="check"><input type="checkbox" name="auto" ${a.auto ? 'checked' : ''}> 跟随默认规则</label>` : ''}
-      <div data-own class="stack ${a.auto ? 'hidden' : ''}">
-        <label class="check"><input type="checkbox" name="deliver" ${a.auto || a.deliver ? 'checked' : ''}> 存进${boxName}邮箱</label>
-        <label>转发到外部邮箱<input name="fwd_to" type="email" value="${esc(a.fwd_to)}" placeholder="例如 you@gmail.com,不转发就留空"></label>
-        <p class="hint">${FWD_HINT}</p>
-      </div>
-      <label>有效期<select name="days"><option value="keep">不改(${a.expires_at ? fmtDay(a.expires_at) + ' 到期' : '永久'})</option><option value="0">改成永久</option><option value="1">从现在起 1 天</option><option value="7">从现在起 7 天</option><option value="30">从现在起 30 天</option></select></label>`, async (f) => {
+      <label>有效期<select name="days"><option value="keep">不改(${a.expires_at ? fmtDay(a.expires_at) + ' 到期' : '永久'})</option><option value="0">改成永久</option><option value="1">从现在起 1 天</option><option value="7">从现在起 7 天</option><option value="30">从现在起 30 天</option></select></label>
+      ${TEMP_DEST_NOTE()}`, async (f) => {
       const j = { note: f.get('note') };
-      if (f.get('auto') === 'on') j.auto = true;
-      else { j.auto = false; j.deliver = f.get('deliver') === 'on'; j.fwd_to = f.get('fwd_to'); }
       if (f.get('days') !== 'keep') j.days = Number(f.get('days'));
       await api(`/temp/${encodeURIComponent(a.address)}`, { method: 'PATCH', json: j });
       toast('已保存'); reload();
     });
-    const auto = $('#editBody [name=auto]');
-    if (auto) auto.onchange = () => $('#editBody [data-own]').classList.toggle('hidden', auto.checked);
   }));
 }
 
 function newTempDialog(domain) {
   editDialog('新建临时地址', `
-    <p class="muted sm" style="margin:0">不建也能用:随便写一个前缀就能收信。只有想提前写好备注、设有效期或单独转发时才需要在这里建。</p>
+    <p class="muted sm" style="margin:0">不建也能用:随便写一个前缀就能收信。只有想提前写好备注或设有效期时才需要在这里建。</p>
     <label>地址
       <div class="addr-input"><input name="local" placeholder="留空就随机生成" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span>
       <button type="button" class="icon-btn" data-rand title="随机生成一个">${icon('dice')}</button></div></label>
@@ -574,10 +574,8 @@ function newTempDialog(domain) {
       <label>备注<input name="note" placeholder="例如:某购物网站" maxlength="100"></label>
       <label>有效期<select name="days"><option value="0">永久</option><option value="1">1 天</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
     </div>
-    <label class="check"><input type="checkbox" name="deliver" checked> 存进我的邮箱</label>
-    <label>同时转发到外部邮箱(可选)<input name="fwd_to" type="email" placeholder="例如 you@gmail.com"></label>
-    <p class="hint">${FWD_HINT}</p>`, async (f) => {
-    const r = await api('/temp', { method: 'POST', json: { local: f.get('local'), note: f.get('note'), days: Number(f.get('days')), deliver: f.get('deliver') === 'on', fwd_to: f.get('fwd_to') } });
+    ${TEMP_DEST_NOTE()}`, async (f) => {
+    const r = await api('/temp', { method: 'POST', json: { local: f.get('local'), note: f.get('note'), days: Number(f.get('days')) } });
     state.me = await api('/me');
     await pageTemp();
     copyText(r.address);
@@ -593,13 +591,12 @@ async function pageTemp() {
   const { items, domain, defaults } = await api('/temp' + (all ? '?all=1' : ''));
   tempDefaults = defaults || null;
   const d = defaults;
-  const autoN = items.filter((a) => a.auto).length;
   page.innerHTML = `${head('临时邮箱', `随便写一个前缀 <code>任意名字@${esc(domain)}</code> 就能收信,不用提前建。收到第一封信后,地址会自动出现在下面。`,
     `<button class="primary" id="newTemp">${icon('plus')}新建</button>`)}
   <div class="page-body">
-    ${d ? tempTargetPanel({ catch_all: d.box, catch_all_fwd: d.fwd, locked: d.locked }) : ''}
+    <div class="dest-note">${icon('route')}<span>${TEMP_DEST_TEXT()}</span>${state.me.is_admin ? '<a data-go-settings>去设置修改</a>' : ''}</div>
     <section class="panel">
-      <div class="sec-head"><h2>${all ? '所有人的临时地址' : '我的临时地址'} <span class="count">${items.length}</span>${autoN ? `<span class="muted sm">其中 ${autoN} 个是自动出现的</span>` : ''}</h2>
+      <div class="sec-head"><h2>${all ? '所有人的临时地址' : '我的临时地址'} <span class="count">${items.length}</span></h2>
         <div class="tools">
           <div class="search sm-search">${icon('search')}<input id="tempQ" type="search" placeholder="搜索地址或备注"></div>
           ${state.me.is_admin ? `<label class="check sm"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
@@ -611,7 +608,7 @@ async function pageTemp() {
   $('#newTemp').onclick = () => newTempDialog(domain);
   if ($('#tempAll')) $('#tempAll').onchange = (e) => { state.tempAll = e.target.checked; pageTemp(); };
   $('#tempQ').oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.temp-rows tr', page).forEach((tr) => (tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none')); };
-  if (d) wireTempTarget($('[data-target]', page), { catch_all: d.box, catch_all_fwd: d.fwd, locked: d.locked }, pageTemp);
+  if ($('[data-go-settings]', page)) $('[data-go-settings]', page).onclick = () => openPage('settings');
 }
 
 // ---------- 个人设置 ----------
@@ -683,7 +680,7 @@ async function pageSettings() {
 // ---------- 管理后台 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号', 'users'], ['addresses', '别名和群组', 'at'],
-  ['temps', '临时地址', 'shuffle'], ['routing', '收信规则', 'route'], ['send', '发信', 'send'], ['logs', '记录', 'list'],
+  ['temps', '临时地址', 'shuffle'], ['send', '发信', 'send'], ['logs', '记录', 'list'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -769,13 +766,13 @@ const ADMIN = {
         <label>存储上限(MB)<span class="muted sm">0 表示不限</span><input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
         <label>每天最多发信<span class="muted sm">0 表示不限</span><input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>
       </div>
-      ${u.id ? `<label>转发到外部邮箱<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="不转发就留空"></label>` : ''}
+      <label>转发到外部邮箱<span class="muted sm">这个账号收到的信同时转发到这里,留空表示不转发。外部邮箱要先在 Cloudflare「电子邮件路由 → 目标地址」验证</span><input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
       ${u.id ? `<label class="check"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}> 停用这个账号(不能登录,发来的信会被退回)</label>` : ''}`;
     $('#newUser').onclick = () => editDialog('新建账号', userFields(), async (f) => {
       await api('/admin/users', { method: 'POST', json: {
         address: `${String(f.get('local')).trim().toLowerCase()}@${domain}`, name: f.get('name'), password: f.get('password'),
-        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')),
+        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'),
       } });
       toast('已创建'); reload();
     }, '创建');
@@ -869,38 +866,6 @@ const ADMIN = {
   async temps(el) {
     const { items } = await api('/temp?all=1');
     el.innerHTML = `<section class="panel"><div class="sec-head"><h2>所有人的临时地址 <span class="count">${items.length}</span></h2></div>${tempRows(items, true, () => ADMIN.temps(el))}</section>`;
-  },
-
-  async routing(el) {
-    const [r, { items: users }] = await Promise.all([api('/admin/routing'), api('/admin/users')]);
-    el.innerHTML = `<div class="narrow-col">
-    <section class="panel">
-      <h2>一封信怎么送</h2>
-      <ol class="flow">
-        <li><strong>发给账号地址</strong><span class="muted">进那个账号的邮箱(账号设置了转发就同时转发)</span></li>
-        <li><strong>发给别名、群组、临时地址</strong><span class="muted">按它们各自的设置送;停用或过期的直接退回</span></li>
-        <li><strong>发给其他任何地址</strong><span class="muted">按下面的兜底规则处理。这样随便写一个前缀也能收到信</span></li>
-      </ol>
-    </section>
-    <form class="panel" id="routeForm">
-      <h2>兜底规则 <span class="muted sm">发到不存在地址的信</span></h2>
-      <label>存进哪个邮箱
-        <select name="catch_all" ${r.locked ? 'disabled' : ''}>
-          <option value="">不存,直接退回(除非下面设了转发)</option>
-          ${users.map((u) => `<option value="${esc(u.address)}" ${u.address === r.catch_all ? 'selected' : ''}>${esc(u.address)}</option>`).join('')}
-          ${r.catch_all && !users.some((u) => u.address === r.catch_all) ? `<option selected>${esc(r.catch_all)}</option>` : ''}
-        </select>
-        ${r.locked ? '<span class="muted sm">这一项写在部署配置里(CATCH_ALL),要改请改配置文件</span>' : ''}</label>
-      <label>同时转发到外部邮箱<input name="catch_all_fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="不转发就留空"></label>
-      <p class="hint">${FWD_HINT}</p>
-      <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form></div>`;
-    $('#routeForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const f = new FormData(e.target), j = { catch_all_fwd: f.get('catch_all_fwd') };
-      if (!r.locked) j.catch_all = f.get('catch_all');
-      try { await api('/admin/routing', { method: 'POST', json: j }); toast('已保存,最多 30 秒后生效'); } catch (x) { toast(x.message); }
-    };
   },
 
   async send(el) {

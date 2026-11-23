@@ -49,6 +49,14 @@ const addrRow = (a) => ({ ...a, members: JSON.parse(a.members || '[]') });
 
 // 升级前用过的前缀(收过信但没登记的地址)补登记成自动临时地址,只做一次
 async function backfillAuto(env) {
+  // 以前单独设过去向的临时地址:管理员的改成跟随全局设置,普通账号的改成进自己邮箱
+  if (!(await getSetting(env, 'temp_global_v1'))) {
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE addresses SET auto = 1, deliver = 1, fwd_to = '' WHERE kind = 'temp' AND (owner IS NULL OR owner IN (SELECT address FROM users WHERE is_admin = 1))`),
+      env.DB.prepare(`UPDATE addresses SET auto = 0, deliver = 1, fwd_to = '' WHERE kind = 'temp' AND owner IN (SELECT address FROM users WHERE is_admin = 0)`),
+    ]);
+    await saveSetting(env, 'temp_global_v1', String(Date.now()));
+  }
   if (await getSetting(env, 'auto_temp_v1')) return;
   const r = await env.DB.prepare(
     `SELECT envelope_to AS a, mailbox, COUNT(*) AS n, MAX(date) AS last FROM messages
@@ -125,13 +133,11 @@ export async function extra(path, method, request, env, user, url) {
     if (!LOCAL_RE.test(local) || local.includes('+')) return err('地址只能用小写字母、数字、点、横线、下划线');
     const address = `${local}@${domain}`;
     if (await taken(env, address)) return err('这个地址已经被占用了,换一个');
-    const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
-    const deliver = b.deliver === undefined ? 1 : b.deliver ? 1 : 0;
-    if (!deliver && !f.value) return err('至少选一个:存进我的邮箱,或转发到外部邮箱');
     const days = Number(b.days) || 0;
+    // 去向不在这里设:管理员的临时地址跟随全局设置(设置 → 临时邮箱收件地址),普通账号的进自己邮箱
     await env.DB.prepare(
-      `INSERT INTO addresses (address, kind, owner, deliver, fwd_to, note, expires_at, created_at) VALUES (?, 'temp', ?, ?, ?, ?, ?, ?)`
-    ).bind(address, user.address, deliver, f.value, clean(b.note, 100), days ? Date.now() + days * DAY : 0, Date.now()).run();
+      `INSERT INTO addresses (address, kind, owner, auto, note, expires_at, created_at) VALUES (?, 'temp', ?, ?, ?, ?, ?)`
+    ).bind(address, user.address, user.is_admin ? 1 : 0, clean(b.note, 100), days ? Date.now() + days * DAY : 0, Date.now()).run();
     return json({ ok: true, address });
   }
   let m = path.match(/^\/temp\/([^/]+)$/);
@@ -148,16 +154,9 @@ export async function extra(path, method, request, env, user, url) {
       const next = { ...a };
       if ('enabled' in b) next.enabled = b.enabled ? 1 : 0;
       if ('note' in b) next.note = clean(b.note, 100);
-      if ('deliver' in b) next.deliver = b.deliver ? 1 : 0;
-      if ('fwd_to' in b) { const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error); next.fwd_to = f.value; }
       if ('days' in b) { const d = Number(b.days) || 0; next.expires_at = d ? Date.now() + d * DAY : 0; }
-      // 自动地址:auto=true 继续跟随默认规则;改了去向就变成单独设置
-      if ('auto' in b) next.auto = b.auto ? 1 : 0;
-      else if ('deliver' in b || 'fwd_to' in b) next.auto = 0;
-      if (!next.auto && !next.deliver && !next.fwd_to) return err('至少选一个:存进我的邮箱,或转发到外部邮箱');
-      if (!next.auto && next.deliver && !next.owner) next.owner = user.address;
-      await env.DB.prepare('UPDATE addresses SET enabled = ?, note = ?, deliver = ?, fwd_to = ?, expires_at = ?, auto = ?, owner = ? WHERE address = ?')
-        .bind(next.enabled, next.note, next.deliver, next.fwd_to, next.expires_at, next.auto, next.owner, address).run();
+      await env.DB.prepare('UPDATE addresses SET enabled = ?, note = ?, expires_at = ? WHERE address = ?')
+        .bind(next.enabled, next.note, next.expires_at, address).run();
       return json({ ok: true });
     }
   }
@@ -234,8 +233,10 @@ export async function extra(path, method, request, env, user, url) {
     if (!isLocal(env, address)) return err(`只能用这些域名:${domainsOf(env).join(', ')}`);
     if (String(b.password || '').length < 10) return err('密码至少 10 位');
     if (await taken(env, address)) return err('这个地址已经存在(账号、别名或临时地址)');
-    await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, quota_mb, send_limit, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(address, clean(b.name, 80), await hashPassword(b.password), b.is_admin ? 1 : 0, Math.max(0, Number(b.quota_mb) || 0), Math.max(0, Number(b.send_limit) || 0), Date.now()).run();
+    const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
+    await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, quota_mb, send_limit, fwd_to, fwd_keep, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(address, clean(b.name, 80), await hashPassword(b.password), b.is_admin ? 1 : 0, Math.max(0, Number(b.quota_mb) || 0), Math.max(0, Number(b.send_limit) || 0),
+        f.value, b.fwd_keep === false ? 0 : 1, Date.now()).run();
     return json({ ok: true });
   }
   m = path.match(/^\/admin\/users\/(\d+)(\/password|\/logout)?$/);

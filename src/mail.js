@@ -47,8 +47,7 @@ export async function route(env, rcpt) {
     }
     if (a.kind === 'group') {
       for (const m of JSON.parse(a.members || '[]')) (isLocal(env, m) ? out.boxes : out.forwards).add(m);
-    } else if (a.owner && (a.kind === 'alias' || a.deliver)) out.boxes.add(a.owner);
-    if (a.kind === 'temp' && a.fwd_to) out.forwards.add(a.fwd_to);
+    } else if (a.owner) out.boxes.add(a.owner);
     await env.DB.prepare('UPDATE addresses SET hits = hits + 1, last_at = ? WHERE address = ?').bind(Date.now(), rcpt).run();
     if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
     return out;

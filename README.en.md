@@ -5,11 +5,11 @@
 A webmail that runs entirely on Cloudflare. Mail sent to `anything@your-domain` lands in your web inbox. No server needed, and personal use fits within Cloudflare's free tier.
 
 - **Receive at any address**: any prefix `@your-domain` works. Each message shows which address it was sent to, and you can filter by address
-- **Temporary addresses**: one address per website, with an optional expiry and note. Mail goes to your inbox or is forwarded to Gmail or another external mailbox. Disable one and later mail is bounced
+- **Temporary addresses**: write any prefix when signing up and it receives mail; after its first message it appears in the temporary address list, where you can add a note, set an expiry or disable it (later mail bounces). Where this mail goes is one global setting: the admin mailbox by default, or a custom mailbox such as Gmail
 - **Business-style accounts**: separate accounts for family or teammates; each person signs in, sends and receives, and sees only their own mail. Bulk creation is supported
 - **Aliases and groups**: `sales@` lands in alice's inbox and she can send as it; `team@` delivers one message to several members (external addresses allowed)
 - **Full mail features**: compose, reply, forward, drafts, signature, auto-reply, forwarding to an external mailbox; replies default to the address the mail was sent to
-- **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), aliases and groups, all temporary addresses, catch-all rules, sending setup, and login / delivery / sending logs
+- **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), aliases and groups, all temporary addresses, sending setup, and login / delivery / sending logs
 - Remote images are blocked by default (anti-tracking), HTML mail is rendered in a sandbox, and trash is emptied after 30 days
 - `name+anything@domain` goes to the same mailbox
 
@@ -41,11 +41,11 @@ Note: if this domain already uses another mail service (Google Workspace, Micros
 
 1. To an **account address**: into that account's inbox, and also forwarded if the account has forwarding set
 2. To an **alias, group or temporary address**: according to its own settings; disabled or expired addresses bounce
-3. To **any other address**: handled by the catch-all rule in Admin console → Routing (store in a mailbox, forward externally, or bounce)
+3. To **any other address** (temporary addresses): handled by Settings → Temporary mail destination, which stores it in the admin mailbox by default or forwards it to a custom mailbox
 
 ## Forwarding to external mailboxes
 
-Temporary addresses, personal settings, group members and the catch-all rule can all forward to Gmail, Outlook and so on. Forwarding uses Cloudflare's built-in forwarding: free and outside the sending quota, but **each external mailbox must be verified once**:
+The temporary mail destination (global), account forwarding (when creating an account or in personal settings) and group members can all be external mailboxes such as Gmail or Outlook. Forwarding uses Cloudflare's built-in forwarding: free and outside the sending quota, but **each external mailbox must be verified once**:
 
 Cloudflare dashboard → your domain → Email → Email Routing → Destination addresses → Add, then click the verification link sent to that mailbox.
 

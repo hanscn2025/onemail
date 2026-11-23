@@ -511,3 +511,8 @@ details summary { cursor: pointer; font-size: 12px; }
 .radio-card strong { color: var(--text); font-size: 14px; }
 .hint strong { color: var(--text-2); }
 @media (max-width: 720px) { .choice { grid-template-columns: 1fr; } }
+
+.dest-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); font-size: 13px; color: var(--text-2); }
+.dest-note .ic { color: var(--accent-ink); width: 16px; height: 16px; }
+.dest-note span { flex: 1; min-width: 200px; }
+.dest-note a { font-weight: 600; }
