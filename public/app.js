@@ -477,9 +477,50 @@ async function openPage(name) {
 }
 $$('[data-p]').forEach((a) => (a.onclick = () => openPage(a.dataset.p)));
 
+// 页面骨架:标题行(右边放这一页的操作) + 下面一块块白色内容
 function head(title, desc, right = '') {
-  return `<header class="page-head">
-    <div class="page-title"><h1>${title}</h1>${desc ? `<p class="muted">${desc}</p>` : ''}</div>${right}</header>`;
+  return `<header class="pg-head">
+    <div class="page-title"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ''}</div><div class="pg-actions" id="pgActions">${right}</div></header>`;
+}
+const searchBox = (id, ph) => `<div class="search">${icon('search')}<input id="${id}" type="search" placeholder="${ph}"></div>`;
+// 筛选栏:左边快速筛选,右边排序
+function filterBar(chips, sorts) {
+  return `<div class="blk fbar">
+    ${chips.map(([k, t, n], i) => `<button type="button" class="fchip ${i ? '' : 'on'}" data-f="${k}">${t} ${n}</button>`).join('')}
+    <span class="spacer"></span>
+    ${sorts ? `<select class="sort-sel" id="sortSel">${sorts.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>` : ''}
+  </div>`;
+}
+const tblFoot = (n, unit) => `<div class="tbl-foot">共 <span data-total>${n}</span> ${unit}</div>`;
+// 行上带 data-st(状态标签,空格分开)、data-q(搜索文字)、data-s1/s2/s3(排序值)
+function wireList(tbody, { searchEl, sortEl } = {}) {
+  if (!tbody) return;
+  const rows = () => [...tbody.children];
+  const apply = () => {
+    const f = $('.fchip.on', page)?.dataset.f || 'all';
+    const q = (searchEl?.value || '').trim().toLowerCase();
+    let n = 0;
+    rows().forEach((tr) => {
+      const ok = (f === 'all' || (tr.dataset.st || '').split(' ').includes(f)) && (!q || (tr.dataset.q || '').includes(q));
+      tr.style.display = ok ? '' : 'none';
+      if (ok) n++;
+    });
+    const c = $('[data-total]', page);
+    if (c) c.textContent = n;
+  };
+  const sort = () => {
+    if (!sortEl) return;
+    const [k, dir] = sortEl.value.split(':');
+    rows().sort((a, b) => {
+      const x = a.dataset['s' + k] ?? '', y = b.dataset['s' + k] ?? '';
+      const c = x !== '' && y !== '' && !isNaN(x) && !isNaN(y) ? Number(x) - Number(y) : String(x).localeCompare(String(y));
+      return dir === 'desc' ? -c : c;
+    }).forEach((tr) => tbody.appendChild(tr));
+  };
+  $$('.fchip', page).forEach((b) => (b.onclick = () => { $$('.fchip', page).forEach((x) => x.classList.toggle('on', x === b)); apply(); }));
+  if (searchEl) searchEl.oninput = apply;
+  if (sortEl) sortEl.onchange = sort;
+  sort();
 }
 function wire(root = page) {
   $('#meMenu').classList.add('hidden');
@@ -567,29 +608,37 @@ function defaultChips() {
   return parts.join('') || '<span class="chip">退回</span>';
 }
 
+function tempBar(items) {
+  const now = Date.now();
+  const n = (f) => items.filter(f).length;
+  const exp = (a) => a.expires_at && a.expires_at < now;
+  return filterBar([['all', '全部', items.length], ['on', '使用中', n((a) => a.enabled && !exp(a))], ['off', '已停用', n((a) => !a.enabled)], ['exp', '已过期', n((a) => a.enabled && exp(a))]],
+    [['1:desc', '按最近收信'], ['2:desc', '按收到数量'], ['3:asc', '按地址']]);
+}
+
 function tempRows(items, showOwner, reload) {
-  if (!items.length) return `<div class="empty small">${icon('mailclock')}<p>还没有临时地址</p></div>`;
+  if (!items.length) return `<div class="blk"><div class="empty small">${icon('mailclock')}<p>还没有临时地址</p></div></div>`;
   const now = Date.now();
   const rows = items.map((a) => {
     const expired = a.expires_at && a.expires_at < now;
     const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : badge('ok', '使用中');
     const to = a.auto ? defaultChips() : `<span class="chip">${icon('inbox', 'sm')}${a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '')}</span>`;
     const exp = a.expires_at ? (expired ? '已过期' : `${fmtDay(a.expires_at)} 到期`) : '永久';
-    return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to).toLowerCase())}">
-      <td><div class="addr-cell"><code>${esc(a.address)}</code><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
+    return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
+      <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
       <td><div class="chips">${to}</div>${a.auto ? '' : ''}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
       <td class="acts">
-        <button class="icon-btn" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}" title="查看收到的信">${icon('inbox')}</button>
-        <button class="icon-btn" data-tedit="${esc(a.address)}" title="设置">${icon('edit')}</button>
-        <button class="icon-btn" data-ttoggle="${esc(a.address)}" data-on="${a.enabled}" title="${a.enabled ? '停用（之后发来的信会被退回）' : '启用'}">${icon('power')}</button>
-        <button class="icon-btn danger" data-tdel="${esc(a.address)}" title="删除">${icon('trash')}</button>
+        <button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}">查看信</button>
+        <button class="lnk" data-tedit="${esc(a.address)}">编辑</button>
+        <button class="lnk" data-ttoggle="${esc(a.address)}" data-on="${a.enabled}" title="${a.enabled ? '停用后发来的信会被退回' : ''}">${a.enabled ? '停用' : '启用'}</button>
+        <button class="lnk danger" data-tdel="${esc(a.address)}">删除</button>
       </td></tr>`;
   }).join('');
   setTimeout(() => wireTemp(items, reload));
-  return `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th></th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>`;
+  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th>操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
 }
 
 function wireTemp(items, reload) {
@@ -646,23 +695,17 @@ async function pageTemp() {
   const { items, domain, defaults } = await api('/temp' + (all ? '?all=1' : ''));
   tempDefaults = defaults || null;
   const d = defaults;
-  page.innerHTML = `${head('临时邮箱', `任意前缀 <code>@${esc(domain)}</code> 都能直接收信`,
-)}
-  <div class="page-body">
-    <section class="panel">
-      <div class="sec-head"><h2>${all ? '所有人的临时地址' : '我的临时地址'} <span class="count">${items.length}</span></h2>
-        <div class="tools">
-          <div class="search sm-search">${icon('search')}<input id="tempQ" type="search" placeholder="搜索地址或备注"></div>
-          <button class="primary" id="newTemp">${icon('plus')}新建</button>
-          ${state.me.is_admin ? `<label class="check sm"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
-        </div></div>
-      ${tempRows(items, all, pageTemp)}
-    </section>
+  page.innerHTML = `<div class="pg-col">${head('临时邮箱', `任意前缀 <code>@${esc(domain)}</code> 都能直接收信`, `
+    ${searchBox('tempQ', '搜索地址或备注')}
+    ${state.me.is_admin ? `<label class="check"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
+    <button class="primary" id="newTemp">${icon('plus')}新建</button>`)}
+    ${tempBar(items)}
+    ${tempRows(items, all, pageTemp)}
   </div>`;
   wire();
   $('#newTemp').onclick = () => newTempDialog(domain);
   if ($('#tempAll')) $('#tempAll').onchange = (e) => { state.tempAll = e.target.checked; pageTemp(); };
-  $('#tempQ').oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.temp-rows tr', page).forEach((tr) => (tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none')); };
+  wireList($('.temp-rows', page), { searchEl: $('#tempQ'), sortEl: $('#sortSel', page) });
 }
 
 // ---------- 在 Foxmail / Outlook 里使用 ----------
@@ -762,9 +805,9 @@ async function pageSettings(tab = 'account') {
       <div class="actions"><button class="primary" type="submit">保存</button><button type="button" id="tgTest">发送测试消息</button><button type="button" id="tgUnbind">解除绑定</button></div>
     </form>`,
   }[tab];
-  page.innerHTML = `${head('设置')}
-  <div class="tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
-  <div class="page-body narrow">${tab === 'notify' && state.me.is_admin ? '<div id="tgAdmin"></div>' : ''}${body}</div>`;
+  page.innerHTML = `<div class="pg-col">${head('设置')}
+  <div class="blk tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
+  <div class="pg-stack">${tab === 'notify' && state.me.is_admin ? '<div id="tgAdmin" class="pg-stack"></div>' : ''}${body}</div></div>`;
   wire();
   if ($('#tgAdmin')) await ADMIN.notify($('#tgAdmin'));
   $$('[data-stab]', page).forEach((a) => (a.onclick = () => openPage('settings/' + a.dataset.stab)));
@@ -820,9 +863,9 @@ const ADMIN_TABS = [
 async function pageAdmin(tab = 'overview') {
   if (!state.me.is_admin) return;
   if (!ADMIN_TABS.some((t) => t[0] === tab)) tab = 'overview';
-  page.innerHTML = `${head('管理中心')}
-    <div class="tabs" role="tablist">${ADMIN_TABS.map(([k, t, ic]) => `<a data-tab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
-    <div class="page-body" id="tabBody"><div class="empty small"><p>加载中…</p></div></div>`;
+  page.innerHTML = `<div class="pg-col">${head('管理中心')}
+    <div class="blk tabs" role="tablist">${ADMIN_TABS.map(([k, t, ic]) => `<a data-tab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
+    <div class="pg-stack" id="tabBody"><div class="blk"><div class="empty small"><p>加载中…</p></div></div></div></div>`;
   wire();
   $$('[data-tab]', page).forEach((a) => (a.onclick = () => openPage('admin/' + a.dataset.tab)));
   await ADMIN[tab]($('#tabBody'));
@@ -840,10 +883,10 @@ const ADMIN = {
     const days = Array.from({ length: 14 }, (_, i) => { const d = 13 - i; const r = o.days.find((x) => x.d === d) || {}; return { d, recv: r.recv || 0, sent: r.sent || 0 }; });
     const max = Math.max(1, ...days.map((x) => x.recv));
     const label = (d) => { const t = new Date(Date.now() - d * DAY_MS); return `${t.getMonth() + 1}/${t.getDate()}`; };
-    const tile = (k, v, sub = '') => `<div class="tile"><div class="muted sm">${k}</div><div class="tile-v">${v}</div>${sub ? `<div class="muted sm">${sub}</div>` : ''}</div>`;
+    const tile = (k, v, sub = '') => `<div class="blk tile"><div class="muted sm">${k}</div><div class="tile-v">${v}</div>${sub ? `<div class="muted sm">${sub}</div>` : ''}</div>`;
     const alerts = [];
-    if (!o.can_send) alerts.push(`<div class="alert">${icon('send')}<span>还没开通发信，账号只能收信。</span><a data-goto="send">去设置</a></div>`);
-    if (o.fwd_fail_7d) alerts.push(`<div class="alert bad">${icon('forward')}<span>最近 7 天有 ${o.fwd_fail_7d} 次转发失败，多半是外部邮箱还没在 Cloudflare 验证。</span><a data-goto="logs">看记录</a></div>`);
+    if (!o.can_send) alerts.push(`<div class="blk alert">${icon('send')}<span>还没开通发信，账号只能收信。</span><a data-goto="send">去设置</a></div>`);
+    if (o.fwd_fail_7d) alerts.push(`<div class="blk alert bad">${icon('forward')}<span>最近 7 天有 ${o.fwd_fail_7d} 次转发失败，多半是外部邮箱还没在 Cloudflare 验证。</span><a data-goto="logs">看记录</a></div>`);
     el.innerHTML = `${alerts.join('')}
       <div class="tiles">
         ${tile('账号', o.users, o.disabled ? `${o.disabled} 个已停用` : '全部正常')}
@@ -873,25 +916,26 @@ const ADMIN = {
   async users(el) {
     const { items, domains } = await api('/admin/users');
     const domain = domains[0] || '';
-    el.innerHTML = `<section class="panel">
-      <div class="sec-head"><h2>账号 <span class="count">${items.length}</span></h2>
-        <div class="tools"><div class="search sm-search">${icon('search')}<input id="userQ" type="search" placeholder="搜索账号"></div>
-        <button id="batchUsers">批量创建</button><button class="primary" id="newUser">${icon('plus')}新建账号</button></div></div>
-      <div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>用量</th><th>最近登录</th><th></th></tr></thead><tbody id="userRows">
-      ${items.map((u) => `<tr data-q="${esc((u.address + ' ' + u.name + ' ' + (u.aliases || '')).toLowerCase())}">
+    $('#pgActions').innerHTML = `${searchBox('userQ', '搜索账号')}<button id="batchUsers">批量创建</button><button class="primary" id="newUser">${icon('plus')}新建账号</button>`;
+    const n = (f) => items.filter(f).length;
+    el.innerHTML = `${filterBar([['all', '全部', items.length], ['ok', '正常', n((u) => !u.disabled)], ['off', '已停用', n((u) => u.disabled)], ['admin', '管理员', n((u) => u.is_admin)]],
+      [['1:desc', '按最近登录'], ['2:desc', '按用量'], ['3:asc', '按名称']])}
+      <div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>转发</th><th>用量</th><th>最近登录</th><th>操作</th></tr></thead><tbody id="userRows">
+      ${items.map((u) => `<tr data-q="${esc((u.address + ' ' + u.name + ' ' + (u.aliases || '')).toLowerCase())}" data-st="${u.disabled ? 'off' : 'ok'}${u.is_admin ? ' admin' : ''}" data-s1="${u.last_login || 0}" data-s2="${u.used || 0}" data-s3="${esc(u.name || u.address)}">
         <td><div class="who-cell">${avatar(u.name, u.address)}<div><div><strong>${esc(u.name || u.address.split('@')[0])}</strong> ${u.is_admin ? badge('accent', '管理员') : ''}</div>
           <div class="muted sm">${esc(u.address)}${u.aliases ? ` · 别名 ${esc(u.aliases)}` : ''}</div></div></div></td>
-        <td>${u.disabled ? badge('bad', '已停用') : badge('ok', '正常')}${u.fwd_to ? `<div class="muted sm">转发到 ${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '(发信服务)' : ''}</div>` : ''}${u.ar_on ? '<div class="muted sm">自动回复中</div>' : ''}</td>
+        <td>${u.disabled ? badge('neutral', '已停用') : badge('ok', '正常')}${u.ar_on ? '<div class="muted sm">自动回复中</div>' : ''}</td>
+        <td>${u.fwd_to ? `${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '<div class="muted sm">通过发信服务</div>' : ''}` : '<span class="muted">—</span>'}</td>
         <td>${fmtSize(u.used)}${u.quota_mb ? ` / ${u.quota_mb} MB` : ''}<div class="muted sm">${u.total} 封${u.send_limit ? ` · 每天最多发 ${u.send_limit} 封` : ''}</div></td>
         <td>${ago(u.last_login)}</td>
         <td class="acts">
-          <button class="icon-btn" data-uedit="${u.id}" title="编辑">${icon('edit')}</button>
-          <button class="icon-btn" data-upw="${u.id}" title="重设密码">${icon('key')}</button>
-          <button class="icon-btn" data-uout="${u.id}" title="让它在所有设备退出登录">${icon('logout')}</button>
-          ${u.address === state.me.address ? '' : `<button class="icon-btn danger" data-udel="${u.id}" title="删除">${icon('trash')}</button>`}
-        </td></tr>`).join('')}</tbody></table></div></section>`;
+          <button class="lnk" data-uedit="${u.id}">编辑</button>
+          <button class="lnk" data-upw="${u.id}">重设密码</button>
+          <button class="lnk" data-uout="${u.id}" title="让它在所有设备退出登录">退出登录</button>
+          ${u.address === state.me.address ? '' : `<button class="lnk danger" data-udel="${u.id}">删除</button>`}
+        </td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个账号')}</div>`;
     const reload = () => ADMIN.users(el);
-    $('#userQ').oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('#userRows tr').forEach((tr) => (tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none')); };
+    wireList($('#userRows'), { searchEl: $('#userQ'), sortEl: $('#sortSel', el) });
     const userFields = (u = {}) => `
       ${u.id ? '' : `<label>地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div></label>`}
       <label>显示名称<input name="name" value="${esc(u.name || '')}" maxlength="80"></label>
@@ -945,21 +989,23 @@ const ADMIN = {
   async addresses(el) {
     const [{ items }, { items: users }] = await Promise.all([api('/admin/addresses'), api('/admin/users')]);
     const domain = (state.me.domains || [])[0] || '';
-    el.innerHTML = `<section class="panel">
-      <div class="sec-head"><h2>别名和群组 <span class="count">${items.length}</span></h2><button class="primary" id="newAddr">${icon('plus')}新建</button></div>
-      ${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th></th></tr></thead><tbody>
-      ${items.map((a) => `<tr>
-        <td><div class="addr-cell"><code>${esc(a.address)}</code><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
+    $('#pgActions').innerHTML = `${searchBox('addrQ', '搜索地址或备注')}<button class="primary" id="newAddr">${icon('plus')}新建</button>`;
+    const n = (f) => items.filter(f).length;
+    el.innerHTML = `${filterBar([['all', '全部', items.length], ['alias', '别名', n((a) => a.kind !== 'group')], ['group', '群组', n((a) => a.kind === 'group')], ['off', '已停用', n((a) => !a.enabled)]],
+      [['1:desc', '按收到数量'], ['2:asc', '按地址']])}
+      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th>操作</th></tr></thead><tbody id="addrRows">
+      ${items.map((a) => `<tr data-q="${esc((a.address + ' ' + (a.note || '') + ' ' + (a.kind === 'group' ? a.members.join(' ') : a.owner)).toLowerCase())}" data-st="${a.kind === 'group' ? 'group' : 'alias'}${a.enabled ? '' : ' off'}" data-s1="${a.hits}" data-s2="${esc(a.address)}">
+        <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
         <td>${a.kind === 'group' ? badge('accent', '群组') : badge('neutral', '别名')}</td>
         <td><div class="chips">${(a.kind === 'group' ? a.members : [a.owner]).map((m) => `<span class="chip">${esc(m)}</span>`).join('')}</div></td>
         <td class="num">${a.hits}<div class="muted sm">${a.last_at ? fmtDate(a.last_at) : ''}</div></td>
         <td>${a.enabled ? badge('ok', '使用中') : badge('neutral', '已停用')}</td>
         <td class="acts">
-          <button class="icon-btn" data-aedit="${esc(a.address)}" title="编辑">${icon('edit')}</button>
-          <button class="icon-btn" data-atoggle="${esc(a.address)}" data-on="${a.enabled}" title="${a.enabled ? '停用' : '启用'}">${icon('power')}</button>
-          <button class="icon-btn danger" data-adel="${esc(a.address)}" title="删除">${icon('trash')}</button>
-        </td></tr>`).join('')}</tbody></table></div>` : `<div class="empty small">${icon('at')}<p>还没有别名或群组</p></div>`}
-    </section>`;
+          <button class="lnk" data-aedit="${esc(a.address)}">编辑</button>
+          <button class="lnk" data-atoggle="${esc(a.address)}" data-on="${a.enabled}">${a.enabled ? '停用' : '启用'}</button>
+          <button class="lnk danger" data-adel="${esc(a.address)}">删除</button>
+        </td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个')}` : `<div class="empty small">${icon('at')}<p>还没有别名或群组</p></div>`}</div>`;
+    wireList($('#addrRows'), { searchEl: $('#addrQ'), sortEl: $('#sortSel', el) });
     const reload = () => ADMIN.addresses(el);
     const userOpts = (sel) => users.map((u) => `<option value="${esc(u.address)}" ${u.address === sel ? 'selected' : ''}>${esc(u.address)}${u.name ? ' · ' + esc(u.name) : ''}</option>`).join('');
     $$('[data-copy]', el).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
@@ -999,9 +1045,10 @@ const ADMIN = {
 
   async temps(el) {
     const [route, { items }] = await Promise.all([api('/admin/routing'), api('/temp?all=1')]);
-    el.innerHTML = `<div class="narrow-col">${tempTargetPanel(route)}</div>
-      <section class="panel"><div class="sec-head"><h2>所有人的临时地址 <span class="count">${items.length}</span></h2></div>${tempRows(items, true, () => ADMIN.temps(el))}</section>`;
+    $('#pgActions').innerHTML = searchBox('tempQ', '搜索地址、备注或账号');
+    el.innerHTML = `${tempTargetPanel(route)}${tempBar(items)}${tempRows(items, true, () => ADMIN.temps(el))}`;
     wireTempTarget($('[data-target]', el), route, () => ADMIN.temps(el));
+    wireList($('.temp-rows', el), { searchEl: $('#tempQ'), sortEl: $('#sortSel', el) });
   },
 
   async brand(el) {
@@ -1099,16 +1146,14 @@ const ADMIN = {
   async logs(el, type = 'mail', q = '') {
     const { items } = await api(`/admin/logs?type=${type}&q=${encodeURIComponent(q)}`);
     const cols = type === 'login' ? ['时间', '结果', '账号', 'IP', '详情'] : ['时间', '结果', type === 'send' ? '发件人' : '发件人', type === 'send' ? '收件人' : '收件地址', '详情'];
-    el.innerHTML = `<section class="panel">
-      <div class="sec-head"><div class="seg">${[['mail', '收信'], ['send', '发信'], ['login', '登录']].map(([k, t]) => `<label><input type="radio" name="lt" value="${k}" ${k === type ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div>
-        <div class="search sm-search">${icon('search')}<input id="logQ" type="search" placeholder="按地址搜索" value="${esc(q)}"></div></div>
-      ${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>
+    if (!$('#logQ')) $('#pgActions').innerHTML = searchBox('logQ', '按地址搜索');
+    el.innerHTML = `<div class="blk fbar">${[['mail', '收信'], ['send', '发信'], ['login', '登录']].map(([k, t]) => `<button type="button" class="ltype fchip ${k === type ? 'on' : ''}" data-lt="${k}">${t}</button>`).join('')}</div>
+      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>
       ${items.map((x) => { const k = LOG_KINDS[x.kind] || ['neutral', x.kind]; return `<tr>
         <td class="nowrap">${fmtDate(x.at, true)}</td><td>${badge(k[0], k[1])}</td><td>${esc(x.actor)}</td>
         <td>${esc(type === 'login' ? x.ip : x.target)}</td><td class="detail">${esc(x.detail)}</td></tr>`; }).join('')}
-      </tbody></table></div>` : `<div class="empty small">${icon('history')}<p>没有记录</p></div>`}
-      </section>`;
-    $$('[name=lt]', el).forEach((r) => (r.onchange = () => ADMIN.logs(el, r.value, $('#logQ').value)));
+      </tbody></table></div>${tblFoot(items.length, '条')}` : `<div class="empty small">${icon('history')}<p>没有记录</p></div>`}</div>`;
+    $$('[data-lt]', el).forEach((b) => (b.onclick = () => ADMIN.logs(el, b.dataset.lt, $('#logQ').value.trim())));
     let t; $('#logQ').oninput = (e) => { clearTimeout(t); t = setTimeout(() => ADMIN.logs(el, type, e.target.value.trim()), 400); };
   },
 };
