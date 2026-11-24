@@ -689,3 +689,4 @@ dialog { padding: 24px; border-radius: 8px; }
   .badge.ok::before { background: #6ccb5f; }
   .badge.bad::before { background: #f1707b; }
 }
+.addr-cell code { white-space: nowrap; word-break: normal; }

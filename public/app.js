@@ -464,6 +464,8 @@ function closePage() {
 }
 
 async function openPage(name) {
+  if (name === 'settings/temp') name = 'admin/temps';
+  if (name === 'admin/notify') name = 'settings/notify';
   const [base, tab] = name.split('/');
   if (!PAGES[base]) return;
   $('#app').classList.add('paging'); $('#app').classList.remove('menu', 'reading');
@@ -512,7 +514,7 @@ function fwdModeField(mode = 'cf', name = 'fwd_mode') {
     </div></div>`;
 }
 
-// ---------- 临时邮箱收件地址(设置页和临时邮箱页共用) ----------
+// ---------- 临时邮箱收件地址(管理中心 → 临时邮箱) ----------
 // r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
 function tempTargetPanel(r) {
   const custom = !!r.catch_all_fwd;
@@ -693,13 +695,12 @@ function clientPanel() {
 // ---------- 个人设置：分类标签页，和管理中心同一种结构 ----------
 const SETTINGS_TABS = [
   ['account', '账户', 'user'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'autoreply'],
-  ['notify', '通知', 'bell'], ['temp', '临时邮箱', 'mailclock', true], ['client', '客户端', 'devices'],
+  ['notify', '通知', 'bell'], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
   const tabs = SETTINGS_TABS.filter((t) => !t[3] || state.me.is_admin);
   if (!tabs.some((t) => t[0] === tab)) tab = 'account';
   const s = await api('/settings');
-  const route = tab === 'temp' ? await api('/admin/routing') : null;
   const pct = s.quota_mb ? Math.min(100, (s.used / (s.quota_mb * 1048576)) * 100) : 0;
   const body = {
     account: `
@@ -741,12 +742,11 @@ async function pageSettings(tab = 'account') {
       <label>截止日期<input name="ar_until" type="date" value="${s.ar_until ? fmtDay(s.ar_until - 1) : ''}"></label>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>`,
-    temp: route ? tempTargetPanel(route) : '',
     client: clientPanel(),
     notify: !s.tg_bot ? `
     <section class="panel">
       <h2>Telegram 通知</h2>
-      <p class="status-line">${badge('neutral', '未开通')}<span class="muted">管理员还没设置 Telegram 机器人${state.me.is_admin ? ',<a data-goto-tg>去设置</a>' : ''}</span></p>
+      <p class="status-line">${badge('neutral', '未开通')}<span class="muted">${state.me.is_admin ? '先在上面设置机器人' : '管理员还没设置 Telegram 机器人'}</span></p>
     </section>` : !s.tg_bound ? `
     <section class="panel">
       <h2>Telegram 通知</h2>
@@ -764,12 +764,12 @@ async function pageSettings(tab = 'account') {
   }[tab];
   page.innerHTML = `${head('设置')}
   <div class="tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
-  <div class="page-body narrow">${body}</div>`;
+  <div class="page-body narrow">${tab === 'notify' && state.me.is_admin ? '<div id="tgAdmin"></div>' : ''}${body}</div>`;
   wire();
+  if ($('#tgAdmin')) await ADMIN.notify($('#tgAdmin'));
   $$('[data-stab]', page).forEach((a) => (a.onclick = () => openPage('settings/' + a.dataset.stab)));
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
   if ($('[data-goto-send]', page)) $('[data-goto-send]', page).onclick = () => openPage('admin/send');
-  if ($('[data-goto-tg]', page)) $('[data-goto-tg]', page).onclick = () => openPage('admin/notify');
   if ($('#tgBind')) $('#tgBind').onclick = async () => {
     const w = window.open('', '_blank'); // 先开窗口，避免被浏览器当成弹窗拦掉
     try {
@@ -791,7 +791,6 @@ async function pageSettings(tab = 'account') {
     if (!confirm('解除后不再推送新邮件，确定吗？')) return;
     try { await api('/tg/unbind', { method: 'POST' }); toast('已解除绑定'); pageSettings('notify'); } catch (x) { toast(x.message); }
   };
-  if (route) wireTempTarget($('[data-target]', page), route, () => pageSettings('temp'));
   $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(form), j = {};
@@ -815,7 +814,7 @@ async function pageSettings(tab = 'account') {
 // ---------- 管理中心 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号', 'users'], ['addresses', '别名和群组', 'at'],
-  ['temps', '临时地址', 'mailclock'], ['brand', '品牌', 'palette'], ['send', '发信', 'send'], ['notify', '通知', 'bell'], ['logs', '记录', 'history'],
+  ['temps', '临时邮箱', 'mailclock'], ['brand', '品牌', 'palette'], ['send', '发信', 'send'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -999,8 +998,10 @@ const ADMIN = {
   },
 
   async temps(el) {
-    const { items } = await api('/temp?all=1');
-    el.innerHTML = `<section class="panel"><div class="sec-head"><h2>所有人的临时地址 <span class="count">${items.length}</span></h2></div>${tempRows(items, true, () => ADMIN.temps(el))}</section>`;
+    const [route, { items }] = await Promise.all([api('/admin/routing'), api('/temp?all=1')]);
+    el.innerHTML = `<div class="narrow-col">${tempTargetPanel(route)}</div>
+      <section class="panel"><div class="sec-head"><h2>所有人的临时地址 <span class="count">${items.length}</span></h2></div>${tempRows(items, true, () => ADMIN.temps(el))}</section>`;
+    wireTempTarget($('[data-target]', el), route, () => ADMIN.temps(el));
   },
 
   async brand(el) {
@@ -1075,9 +1076,9 @@ const ADMIN = {
 
   async notify(el) {
     const r = await api('/admin/telegram');
-    el.innerHTML = `<div class="narrow-col"><section class="panel">
-      <h2>Telegram 通知</h2>
-      <p class="status-line">${r.bot ? `${badge('ok', '已连接')}<span class="muted">机器人 @${esc(r.bot)},${r.bound} 人已绑定</span>` : `${badge('neutral', '未设置')}<span class="muted">设置后，每个人可以在「设置 → 通知」绑定自己的 Telegram</span>`}</p>
+    el.innerHTML = `<section class="panel">
+      <h2>Telegram 机器人 <span class="count">管理员</span></h2>
+      <p class="status-line">${r.bot ? `${badge('ok', '已连接')}<span class="muted">@${esc(r.bot)}，${r.bound} 人已绑定</span>` : `${badge('neutral', '未设置')}<span class="muted">设置后，每个人可以在这里绑定自己的 Telegram</span>`}</p>
       <form id="tgForm" class="inline-form">
         <input name="token" type="password" placeholder="${r.bot ? '换一个机器人 Token' : '机器人 Token，如 123456789:AAH…'}" autocomplete="off">
         <button class="primary" type="submit">保存</button>
@@ -1087,9 +1088,9 @@ const ADMIN = {
         <li>在 Telegram 打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>,发送 <code>/newbot</code>,按提示给机器人起名</li>
         <li>复制它回复的 Token，粘贴到上面保存</li>
       </ol>
-    </section></div>`;
+    </section>`;
     const save = async (token) => {
-      try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); ADMIN.notify(el); } catch (x) { toast(x.message); }
+      try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); pageSettings('notify'); } catch (x) { toast(x.message); }
     };
     $('#tgForm').onsubmit = (e) => { e.preventDefault(); const t = e.target.token.value.trim(); if (t) save(t); };
     if ($('#tgClear')) $('#tgClear').onclick = () => { if (confirm('断开后所有人的 Telegram 绑定都会解除，确定吗？')) save(''); };
