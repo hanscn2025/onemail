@@ -1,8 +1,8 @@
-/* OneMail 样式,参考 Outlook 网页版。全站只用下面这几档:
-   字号 12 辅助 / 13 说明 / 14 正文、标签 / 16 选项标题 / 18 卡片标题 / 20 页面标题(24 只用于统计数字)
+/* OneMail 样式,按 Outlook 网页版的 Fluent 2 设计规范。全站只用下面这几档:
+   字号 12 辅助(Caption1) / 14 正文、标签(Body1) / 16 分区标题(Subtitle2) / 20 页面和弹窗标题(Subtitle1),24 只用于统计数字
    字重 400 常规 / 600 强调
-   圆角 4 标签 / 6 按钮、输入框、菜单项 / 8 卡片、弹窗、菜单;头像和开关是圆的
-   控件高 32(设置卡片里 36);侧栏行高 36;图标 16(按钮、文字旁)/ 20(独立图标按钮、侧栏)
+   圆角 4 按钮、输入框、标签 / 6 菜单项 / 8 卡片、弹窗、菜单;头像和开关是圆的
+   控件高 32;侧栏行高 36;间距 4/8/12/16/20/24/32;图标 16(按钮、文字旁)/ 20(独立图标按钮、侧栏)
    颜色 黑白灰为主,蓝色只用于主按钮、选中、链接、未读 */
 
 :root {
@@ -10,11 +10,12 @@
   --surface: #ffffff;     /* 内容卡片 */
   --raised: #ffffff;      /* 弹窗、菜单 */
   --field: #ffffff;       /* 顶部搜索框 */
-  --line: #e0e0e0;
-  --line-soft: #ededed;
+  --line: #d1d1d1;          /* Stroke1 */
+  --line-soft: #e0e0e0;     /* Stroke2 */
+  --line-strong: #616161;   /* 输入框底边 StrokeAccessible */
   --text: #242424;
   --text-2: #424242;
-  --muted: #707070;
+  --muted: #616161;
   --accent: #0f6cbd;
   --accent-hover: #115ea3;
   --accent-text: #ffffff;
@@ -40,7 +41,8 @@
     --surface: #1e1f22;
     --raised: #2a2b2f;
     --field: #2b2d31;
-    --line: #34363b;
+    --line: #4d4f54;
+    --line-strong: #adadad;
     --line-soft: #2a2c30;
     --text: #e3e3e3;
     --text-2: #c4c7c5;
@@ -577,74 +579,101 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .file-btn.bordered { border: 1px solid var(--line); }
 .panel label.file-btn { display: inline-flex; gap: 6px; }
 
-/* ---------- 页面间距规则(所有页面同一套) ----------
-   页头:上 28,标题到标签栏 16
-   内容区:标签栏(或页头)下方 32 开始;左边和标题对齐
-   分区:之间 32 + 细线 + 32;分区内 标题→内容 20,字段之间 20,字段名→输入框 8,按钮上方多 4
-   小节(分区里的二级标题):小节之间 24,小标题→内容 8
-   宽度:表单类内容最宽 720,表格类铺满 */
-.page-head { padding: 28px 32px 16px; }
+/* ---------- 页面:按 Fluent 2(Outlook 网页版设计规范) ----------
+   字体 Body1 14/20 常规;Caption1 12/16;Subtitle2 16/22 半粗(分区标题);Subtitle1 20/28 半粗(页面、弹窗标题)
+   间距只用 Fluent 档位 4 / 8 / 12 / 16 / 20 / 24 / 32
+   控件 Medium:高 32,圆角 4;输入框灰边 + 深色底边,聚焦底边 2px 品牌蓝;按钮最小宽 96
+   分区之间 32,不加分隔线;分区标题 → 内容 12;字段之间 16;字段名 → 控件 4 */
+.page-head { padding: 24px 32px 12px; }
+.page-title h1 { font-size: 20px; line-height: 28px; }
+.page-title p { margin-top: 4px; font-size: 14px; line-height: 20px; color: var(--text-2); }
+.tabs { padding: 0 20px; gap: 0; }
+.tabs a { height: 44px; padding: 0 12px; font-size: 14px; }
+.tabs a.on::after { left: 12px; right: 12px; height: 3px; border-radius: 2px; }
 .page-body { padding: 16px 32px 48px; align-content: start; }
-.tabs + .page-body { padding-top: 32px; }
-.narrow-col { max-width: 720px; }
-.page-body.narrow { max-width: 784px; } /* 720 + 左右各 32 */
-.panel { padding: 32px 0; gap: 20px; }
-.panel:first-child { padding-top: 0; }
-.panel h2 { font-size: 18px; }
-.panel h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.panel .sub { display: grid; gap: 8px; }
-.panel .subs { display: grid; gap: 24px; }
-.panel label, .field-title { gap: 8px; font-size: 14px; color: var(--text); }
-.panel input:not([type=checkbox]):not([type=radio]), .panel select { height: 36px; padding: 0 12px; }
-.panel textarea { padding: 8px 12px; }
-.panel .addr-input input { height: 34px; }
-.panel .actions { margin-top: 4px; }
-.panel .actions button, .panel .inline-form button { height: 36px; padding: 0 16px; }
-.panel .sec-head .tools button { height: 36px; }
-.panel input[type=checkbox], .panel input[type=radio] { width: 16px; height: 16px; flex: none; }
-.check { font-weight: 400 !important; font-size: 14px; color: var(--text); }
-.field { gap: 8px; }
-.choice { gap: 16px; }
-.radio-card { padding: 16px 20px; border-radius: 8px; }
-.radio-card > span { gap: 4px; }
-.radio-card strong { font-size: 15px; }
-.radio-card .muted.sm { font-size: 13px; line-height: 1.6; }
-.radio-card input { margin-top: 4px !important; }
-.status-line, .hint, .steps { font-size: 14px; }
-.panel .tbl.mini td { padding: 8px 12px 8px 0; }
-.logo-edit .stack { gap: 12px; }
-/* 概览:提醒 → 16 → 数字块 → 32 → 图表 */
-.alert { margin: 0 0 16px; font-size: 14px; }
-.alert + .alert { margin-top: -8px; }
-.tiles { padding-top: 0; gap: 16px; }
-.tile { padding: 20px; gap: 4px; }
-.two { margin-top: 32px; gap: 48px; }
-.two .panel { padding: 0; }
-@media (max-width: 1100px) { .two { gap: 32px; } }
-@media (max-width: 760px) {
-  .page-head { padding: 20px 16px 12px; }
-  .page-body { padding: 12px 16px 32px; }
-  .tabs + .page-body { padding-top: 24px; }
-  .panel { padding: 24px 0; }
-  .panel:first-child { padding-top: 0; }
-  .two .panel { padding: 0; }
-  .two { margin-top: 24px; }
-  .choice { grid-template-columns: 1fr; }
+.tabs + .page-body { padding-top: 24px; }
+.narrow-col { max-width: 640px; }
+.page-body.narrow { max-width: 704px; }
+.panel, .panel:last-child { padding: 0 0 32px; gap: 16px; border-bottom: none; }
+.panel h2 { font-size: 16px; line-height: 22px; font-weight: 600; margin-bottom: -4px; }
+.panel h3 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; }
+.panel .sub { display: grid; gap: 4px; }
+.panel .subs { display: grid; gap: 16px; }
+.panel label, .field-title, #editBody label { display: grid; gap: 4px; font-size: 14px; line-height: 20px; font-weight: 400; color: var(--text); }
+.field { gap: 4px; }
+/* 输入框 */
+.panel input:not([type=checkbox]):not([type=radio]), .panel select, .panel textarea,
+#editBody input:not([type=checkbox]):not([type=radio]), #editBody select, #editBody textarea {
+  height: 32px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--line); border-bottom-color: var(--line-strong); font-size: 14px;
 }
-.tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.panel textarea, #editBody textarea { height: auto; padding: 6px 10px; line-height: 20px; }
+.panel input:focus, .panel select:focus, .panel textarea:focus, #editBody input:focus, #editBody select:focus, #editBody textarea:focus {
+  border-color: var(--line); border-bottom-color: var(--accent); box-shadow: inset 0 -1px 0 var(--accent);
+}
+.panel input:disabled { background: var(--hover); color: var(--text-2); border-bottom-color: var(--line); }
+.panel .search input:not([type=checkbox]) { padding-left: 32px; }
+.panel .addr-input, #editBody .addr-input { border-radius: 4px; border-bottom-color: var(--line-strong); }
+.panel .addr-input input, #editBody .addr-input input { height: 30px; border: none !important; box-shadow: none !important; }
+.panel .addr-input .icon-btn { height: 30px; }
+/* 按钮 */
+button { border-radius: 4px; }
+.panel .actions button, .panel .inline-form button, .panel .sec-head .tools button:not(.icon-btn), dialog .dlg-foot button {
+  height: 32px; padding: 0 12px; min-width: 96px; font-size: 14px;
+}
+.panel .actions { margin-top: 8px; gap: 8px; }
+.dlg-foot { gap: 8px; }
+/* 勾选、单选、开关 */
+.panel input[type=checkbox], .panel input[type=radio], #editBody input[type=checkbox], #editBody input[type=radio] { width: 16px; height: 16px; flex: none; margin: 0; }
+.check { gap: 8px; font-weight: 400 !important; font-size: 14px; color: var(--text); min-height: 32px; }
+.choice { display: grid; grid-template-columns: 1fr; gap: 4px; }
+.radio-card, .radio-card:has(input:checked) { border: none; border-radius: 0; padding: 6px 0; gap: 8px; background: none; min-height: 0; }
+.radio-card:hover { background: none; }
+.radio-card > span { gap: 0; }
+.radio-card strong { font-size: 14px; line-height: 20px; font-weight: 400; }
+.radio-card .muted.sm { font-size: 12px; line-height: 16px; color: var(--muted); }
+.radio-card input { margin-top: 2px !important; }
+.switch { gap: 8px; font-weight: 400 !important; font-size: 14px; color: var(--text); }
+.switch .track { width: 40px; height: 20px; background: none; border: 1px solid var(--line-strong); }
+.switch .track::after { top: 2px; left: 3px; width: 14px; height: 14px; background: var(--line-strong); box-shadow: none; }
+.switch input:checked + .track { background: var(--accent); border-color: transparent; }
+.switch input:checked + .track::after { background: #fff; transform: translateX(19px); }
+.seg { border-radius: 4px; }
+.seg span { border-radius: 2px; font-size: 14px; }
+/* 说明文字 */
+.status-line, .hint, .steps { font-size: 14px; line-height: 20px; color: var(--text-2); }
+.panel .muted.sm { font-size: 12px; line-height: 16px; }
+/* 表格(Fluent Table Medium:行高 44,单元格左右 8) */
+.tbl { font-size: 14px; }
+.tbl th { font-size: 14px; font-weight: 600; color: var(--text); padding: 0 8px; height: 32px; border-bottom: 1px solid var(--line-soft); }
+.tbl td { padding: 8px; height: 44px; border-bottom: 1px solid var(--line-soft); }
+.tbl .muted.sm { font-size: 12px; }
+.panel .tbl.mini td { padding: 6px 12px 6px 0; height: auto; }
+.addr-cell code { font-size: 14px; }
+.logo-edit .stack { gap: 8px; }
+/* 概览 */
+.alert { margin: 0 0 16px; font-size: 14px; border-radius: 4px; padding: 8px 12px; }
+.alert + .alert { margin-top: -8px; }
+.tiles { padding-top: 0; gap: 16px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.tile { padding: 16px; gap: 4px; border-color: var(--line-soft); }
+.two { margin-top: 32px; gap: 32px; }
+.two .panel { padding: 0; }
 @media (max-width: 1100px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-/* 弹窗表单和设置卡片同一套 */
-dialog { padding: 24px 28px; }
-.dlg-head strong { font-size: 18px; }
-.dlg-head { margin-bottom: 20px; }
-#editBody { gap: 20px; }
-#editBody .form-grid { gap: 20px 16px; }
+@media (max-width: 760px) {
+  .page-head { padding: 16px 16px 8px; }
+  .page-body { padding: 12px 16px 32px; }
+  .tabs + .page-body { padding-top: 20px; }
+  .panel, .panel:last-child { padding: 0 0 24px; }
+  .two { margin-top: 24px; }
+  .tbl td { height: auto; }
+}
+/* 弹窗(Fluent Dialog:圆角 8,内边距 24,标题 20/28,按钮靠右间距 8) */
+dialog { padding: 24px; border-radius: 8px; }
+.dlg-head { margin-bottom: 8px; }
+.dlg-head strong { font-size: 20px; line-height: 28px; font-weight: 600; }
+#editBody { gap: 16px; }
+#editBody .form-grid { gap: 16px; }
 #editForm .dlg-foot { margin-top: 24px; }
-#editBody label { gap: 8px; font-size: 14px; color: var(--text); }
-#editBody input:not([type=checkbox]):not([type=radio]), #editBody select { height: 36px; padding: 0 12px; }
-#editBody input[type=checkbox], #editBody input[type=radio] { width: 16px; height: 16px; flex: none; }
-#editForm .dlg-foot button, #editForm .actions button { height: 36px; padding: 0 16px; }
 /* 状态:小圆点 + 常规文字,不用彩色底块 */
 .badge, .badge.ok, .badge.warn, .badge.bad, .badge.neutral { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; font-size: 13px; font-weight: 400; color: var(--text-2); }
 .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: none; }
@@ -660,4 +689,3 @@ dialog { padding: 24px 28px; }
   .badge.ok::before { background: #6ccb5f; }
   .badge.bad::before { background: #f1707b; }
 }
-.panel .search input:not([type=checkbox]) { padding-left: 34px; }
