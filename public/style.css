@@ -693,7 +693,7 @@ dialog { padding: 24px; border-radius: 8px; }
 
 /* ================= 页面结构(按确认的效果图) =================
    外框:顶栏、侧栏白底,内容区浅灰底
-   内容:居中,最宽 1120;标题行(右边放本页操作)→ 标签块 → 筛选块 → 表格 / 表单块,块之间 16
+   内容:铺满内容区,四周边距 24;标题行(右边放本页操作)→ 标签块 → 筛选块 → 表格 / 表单块,块之间 16
    表格:表头浅灰底,操作用蓝色文字,底部显示总数;表单:白块内边距 24,按钮在底部分隔线下 */
 :root { --page: #f4f5f7; --th: #fafafa; --chip: #f2f3f5; --chip-on: #ebf3fc; }
 @media (prefers-color-scheme: dark) { :root { --page: #141518; --th: #26272b; --chip: #2a2c30; --chip-on: #1b2f45; } }
@@ -703,8 +703,8 @@ dialog { padding: 24px; border-radius: 8px; }
 .surface { margin: 0; border: none; border-radius: 0; }
 .app.paging .surface { background: var(--page); }
 
-.page { background: var(--page); padding: 20px 32px 40px; }
-.pg-col { max-width: 1120px; margin: 0 auto; display: grid; gap: 16px; align-content: start; min-width: 0; }
+.page { background: var(--page); padding: 24px 24px 40px; }
+.pg-col { display: grid; gap: 16px; align-content: start; min-width: 0; } /* 铺满内容区,只留固定边距;表单内容本身限宽 640 */
 .pg-stack { display: grid; gap: 16px; min-width: 0; }
 .pg-head { display: flex; align-items: center; gap: 12px; min-height: 36px; flex-wrap: wrap; }
 .pg-head .page-title { flex: 1; min-width: 200px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -778,3 +778,4 @@ dialog { padding: 24px; border-radius: 8px; }
   .side { background: var(--surface); }
   .acts { margin-left: 0 !important; padding-top: 4px !important; }
 }
+.pg-col .usage { max-width: 640px; }
