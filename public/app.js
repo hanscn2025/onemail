@@ -5,6 +5,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // 线条图标(24x24，描边)
 const ICONS = {
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  dots: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   compose: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2 2 0 0 1 3 3l-9 9a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86Z"/>',
   filepen: '<path d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M13.38 15.63a1 1 0 1 0-3-3l-5.02 5.01a2 2 0 0 0-.5.86l-.84 2.87a.5.5 0 0 0 .62.62l2.87-.84a2 2 0 0 0 .86-.5Z"/>',
@@ -85,7 +88,7 @@ const brandName = () => (state.brand && state.brand.name) || 'OneMail';
 
 const FOLDER_NAMES = { inbox: '收件箱', starred: '星标', sent: '已发送', drafts: '草稿', trash: '垃圾箱' };
 
-const state = { me: null, folder: 'inbox', box: '', q: '', rcpt: '', items: [], cur: null, done: false };
+const state = { me: null, folder: 'inbox', box: '', q: '', mf: '', rcpt: '', items: [], cur: null, done: false };
 
 async function api(path, opts = {}) {
   const o = { ...opts, headers: { ...(opts.headers || {}) } };
@@ -153,7 +156,7 @@ async function boot() {
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
   $('#meAddr').textContent = state.me.address;
   $('#meName').textContent = state.me.name || state.me.address.split('@')[0];
-  for (const id of ['meAvatar', 'meAvatar2']) $('#' + id).outerHTML = avatar(state.me.name, state.me.address).replace('class="avatar"', `class="avatar" id="${id}"`);
+  $('#meAvatar').outerHTML = avatar(state.me.name, state.me.address).replace('class="avatar"', 'class="avatar" id="meAvatar"');
   state.box = state.me.address;
   if (state.me.is_admin) {
     $('#adminLink').classList.remove('hidden');
@@ -175,18 +178,35 @@ $('#boxSel').onchange = (e) => { state.box = e.target.value; state.rcpt = ''; cl
 // ---------- 列表 ----------
 $$('#folders a').forEach((a) => (a.onclick = () => {
   state.folder = a.dataset.f; location.hash = state.folder; $('#app').classList.remove('menu');
+  if (state.q) { state.q = ''; $('#search').value = ''; }
   closePage(); closeReader(); loadList();
 }));
 let searchT;
-$('#search').addEventListener('input', (e) => { clearTimeout(searchT); searchT = setTimeout(() => { state.q = e.target.value.trim(); loadList(); }, 300); });
+$('#search').addEventListener('input', (e) => {
+  clearTimeout(searchT);
+  searchT = setTimeout(() => {
+    state.q = e.target.value.trim();
+    if ($('#app').classList.contains('paging')) { closePage(); history.replaceState(null, '', '#' + state.folder); }
+    loadList();
+  }, 300);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && !e.target.closest('input, textarea, select, [contenteditable]')) { e.preventDefault(); $('#search').focus(); }
+  if (e.key === 'Escape' && e.target === $('#search') && e.target.value) { e.target.value = ''; state.q = ''; loadList(); }
+});
+// 列表筛选:全部 / 未读 / 带附件
+$$('#mfilter a').forEach((a) => (a.onclick = () => {
+  $$('#mfilter a').forEach((x) => x.classList.toggle('on', x === a));
+  state.mf = a.dataset.mf; closeReader(); loadList();
+}));
 $('#refreshBtn').onclick = () => { loadList(); toast('已刷新'); };
 $('#moreBtn').onclick = () => loadList(true);
-// 菜单按钮：手机上滑出侧栏，电脑上收起或展开侧栏
-$('#menuBtn').onclick = () => $('#app').classList.toggle(window.innerWidth <= 720 ? 'menu' : 'collapsed');
+// 手机上点菜单按钮滑出侧栏
 $('#scrim').onclick = () => $('#app').classList.remove('menu');
 // 头像菜单
 $('#meBtn').onclick = (e) => { e.stopPropagation(); $('#meMenu').classList.toggle('hidden'); };
 document.addEventListener('click', (e) => { if (!e.target.closest('.me-wrap')) $('#meMenu').classList.add('hidden'); });
+$('#menuBtn').onclick = () => $('#app').classList.toggle('menu');
 
 async function loadCounts() {
   const c = await api(withBox('/counts')).catch(() => ({}));
@@ -196,10 +216,11 @@ async function loadCounts() {
 
 async function loadList(more) {
   $$('#folders a').forEach((a) => a.classList.toggle('on', a.dataset.f === state.folder));
-  $('#folderTitle').textContent = FOLDER_NAMES[state.folder];
+  $('#folderTitle').textContent = state.q ? `搜索「${state.q}」` : FOLDER_NAMES[state.folder];
   const last = more && state.items[state.items.length - 1];
   const p = new URLSearchParams({ folder: state.folder });
   if (state.q) p.set('q', state.q);
+  if (state.mf) p.set('filter', state.mf);
   if (state.rcpt && state.folder !== 'sent' && state.folder !== 'drafts') p.set('rcpt', state.rcpt);
   if (last) p.set('before', last.date);
   try {
@@ -225,27 +246,43 @@ $('#rcptSel').onchange = (e) => { state.rcpt = e.target.value; closeReader(); lo
 function renderList() {
   const el = $('#items');
   if (!state.items.length) {
-    el.innerHTML = `<div class="empty">${icon(state.q ? 'search' : 'inbox')}<p>${state.q ? '没有找到相关的信' : '这里还没有信'}</p></div>`;
+    el.innerHTML = `<div class="empty">${icon(state.q ? 'search' : 'inbox')}<p>${state.q ? '没有找到相关的信' : state.mf ? '没有符合条件的信' : '这里还没有信'}</p></div>`;
   } else {
     el.innerHTML = state.items.map((m) => {
       const sent = ['sent', 'drafts'].includes(m.folder) || ['sent', 'drafts'].includes(state.folder);
-      const first = (m.to || [])[0] || {};
       const who = sent ? '发给 ' + (m.to || []).map((a) => a.name || a.address).join(', ') : m.from_name || m.from_addr;
-      const av = sent ? avatar(first.name, first.address) : avatar(m.from_name, m.from_addr);
       const tag = m.envelope_to && m.envelope_to !== (state.box || state.me.address) && !sent ? `<span class="rcpt" title="发给 ${esc(m.envelope_to)}">${esc(m.envelope_to.split('@')[0])}</span>` : '';
+      const draft = state.folder === 'drafts';
       return `<div class="item ${m.seen ? '' : 'unread'} ${state.cur?.id === m.id ? 'sel' : ''}" data-id="${m.id}">
-        ${av}
-        <div class="item-main">
-          <div class="item-top"><span class="who">${esc(who)}</span><span class="when">${m.has_attach ? icon('clip', 'sm') : ''}${fmtDate(m.date)}</span></div>
-          <div class="subj">${tag}${esc(m.subject || '(无主题)')}</div>
-          <div class="snip">${esc(m.snippet)}</div>
-        </div>
-        ${state.folder === 'drafts' ? '' : `<button class="star-btn ${m.starred ? 'on' : ''}" data-star title="${m.starred ? '取消星标' : '加星标'}" aria-label="星标">${icon('star')}</button>`}</div>`;
+        <div class="item-top"><span class="who">${esc(who)}</span><span class="when">${m.starred ? icon('star', 'sm on') : ''}${m.has_attach ? icon('clip', 'sm') : ''}${fmtDate(m.date)}</span></div>
+        <div class="subj">${tag}${esc(m.subject || '(无主题)')}</div>
+        <div class="snip">${esc(m.snippet)}</div>
+        <div class="it-acts">
+          ${draft ? '' : `<button data-star title="${m.starred ? '取消星标' : '加星标'}" aria-label="星标" class="${m.starred ? 'starred' : ''}">${icon('star', 'sm')}</button>
+          <button data-seen title="${m.seen ? '标为未读' : '标为已读'}" aria-label="已读未读">${icon(m.seen ? 'unread' : 'mailopen', 'sm')}</button>`}
+          <button data-del title="${state.folder === 'trash' ? '移回' : '删除'}" aria-label="删除">${icon(state.folder === 'trash' ? 'restore' : 'trash', 'sm')}</button>
+        </div></div>`;
     }).join('');
   }
   $('#moreBtn').classList.toggle('hidden', state.done);
   $$('.item', el).forEach((n) => (n.onclick = () => (state.folder === 'drafts' ? openDraft(n.dataset.id) : openMsg(n.dataset.id))));
   $$('[data-star]', el).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); toggleStar(b.closest('.item').dataset.id); }));
+  $$('[data-seen]', el).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); quickAct(b.closest('.item').dataset.id, 'seen'); }));
+  $$('[data-del]', el).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); quickAct(b.closest('.item').dataset.id, 'del'); }));
+}
+
+// 列表里直接标已读未读、删除(垃圾箱里是移回)
+async function quickAct(id, a) {
+  const m = state.items.find((x) => String(x.id) === String(id));
+  if (!m) return;
+  try {
+    if (a === 'seen') { await api(`/messages/${m.id}`, { method: 'PATCH', json: { seen: !m.seen } }); m.seen = m.seen ? 0 : 1; renderList(); loadCounts(); return; }
+    await api(`/messages/${m.id}`, { method: 'PATCH', json: { folder: state.folder === 'trash' ? 'restore' : 'trash' } });
+    toast(state.folder === 'trash' ? '已移回' : '已移到垃圾箱');
+    state.items = state.items.filter((x) => x !== m);
+    if (state.cur && String(state.cur.id) === String(id)) closeReader();
+    renderList(); loadCounts();
+  } catch (x) { toast(x.message); }
 }
 
 // 列表里直接加星、取消星标，不用点开信
@@ -285,23 +322,22 @@ async function openMsg(id, showImages = false) {
   $('#reader').innerHTML = `
     <div class="r-tools">
       <button class="icon-btn mobile-back" data-a="back" title="返回" aria-label="返回">${icon('back')}</button>
-      <div class="tool-group">
-        <button class="tb" data-a="reply" title="回复">${icon('reply')}<span>回复</span></button>
-        <button class="tb" data-a="replyall" title="全部回复">${icon('replyall')}<span>全部回复</span></button>
-        <button class="tb" data-a="forward" title="转发">${icon('forward')}<span>转发</span></button>
-      </div>
+      <button class="icon-btn" data-a="reply" title="回复" aria-label="回复">${icon('reply')}</button>
+      <button class="icon-btn" data-a="replyall" title="全部回复" aria-label="全部回复">${icon('replyall')}</button>
+      <button class="icon-btn" data-a="forward" title="转发" aria-label="转发">${icon('forward')}</button>
       <span class="spacer"></span>
       <button class="icon-btn ${m.starred ? 'starred' : ''}" data-a="star" title="${m.starred ? '取消星标' : '加星标'}" aria-label="星标">${icon('star')}</button>
       <button class="icon-btn" data-a="unread" title="标为未读" aria-label="标为未读">${icon('unread')}</button>
       ${m.folder === 'sent' ? '' : `<a class="icon-btn" href="/api/messages/${m.id}/raw" title="下载原始邮件" aria-label="原始邮件">${icon('download')}</a>`}
       ${trash ? `<button class="icon-btn" data-a="restore" title="移回" aria-label="移回">${icon('restore')}</button><button class="icon-btn danger" data-a="destroy" title="彻底删除" aria-label="彻底删除">${icon('trash')}</button>` : `<button class="icon-btn" data-a="trash" title="删除" aria-label="删除">${icon('trash')}</button>`}
     </div>
+    <div class="r-wrap">
     <div class="r-head">
-      <h2>${esc(m.subject || '(无主题)')}</h2>
+      <h1>${esc(m.subject || '(无主题)')}</h1>
       <div class="r-from">
         ${avatar(m.from_name, m.from_addr)}
         <div class="r-meta">
-          <div class="r-line"><strong>${esc(m.from_name || m.from_addr)}</strong>${m.from_name ? `<span class="muted">&lt;${esc(m.from_addr)}&gt;</span>` : ''}<span class="r-date">${fmtDate(m.date, true)}</span></div>
+          <div class="r-line"><strong>${esc(m.from_name || m.from_addr)}</strong>${m.from_name ? `<span>&lt;${esc(m.from_addr)}&gt;</span>` : ''}<span class="r-date">${fmtDate(m.date, true)}</span></div>
           <div>收件人：${esc(m.to.map(fmtAddr).join(', ') || m.envelope_to || '')}</div>
           ${m.cc.length ? `<div>抄送：${esc(m.cc.map(fmtAddr).join(', '))}</div>` : ''}
           ${m.envelope_to && !m.to.some((a) => a.address === m.envelope_to) ? `<div>投递到：<span class="rcpt">${esc(m.envelope_to)}</span></div>` : ''}
@@ -310,7 +346,9 @@ async function openMsg(id, showImages = false) {
     </div>
     ${m.html && hasRemote && !showImages ? `<div class="notice">${icon('imageoff')}<span>已挡住外部图片，它们可能用来追踪你是否读过这封信。</span><a data-a="images">显示图片</a></div>` : ''}
     <div class="r-body" id="rBody"></div>
-    ${atts.length ? `<div class="atts">${atts.map((a) => `<a class="att" href="/api/messages/${m.id}/att/${a.i}?dl=1" title="${esc(a.filename)}">${icon('file')}<span class="att-name">${esc(a.filename)}</span><span class="muted">${fmtSize(a.size)}</span></a>`).join('')}</div>` : ''}`;
+    ${atts.length ? `<div class="atts">${atts.map((a) => `<a class="att" href="/api/messages/${m.id}/att/${a.i}?dl=1" title="${esc(a.filename)}">${icon('clip')}<span><span class="att-name">${esc(a.filename)}</span><span class="muted">${fmtSize(a.size)}</span></span></a>`).join('')}</div>` : ''}
+    ${m.folder === 'drafts' ? '' : `<div class="r-reply"><button data-a="reply">${icon('reply')}回复</button><button data-a="replyall">${icon('replyall')}全部回复</button><button data-a="forward">${icon('forward')}转发</button></div>`}
+    </div>`;
   $('.mobile-back').style.display = window.innerWidth <= 1100 ? '' : 'none';
 
   const body = $('#rBody');
@@ -367,7 +405,7 @@ function quote(m) {
 
 function openCompose(kind, m) {
   if (!state.me.can_send) {
-    toast(state.me.is_admin ? '还没开通发信：到「管理中心 → 发信」填 Resend Key' : '还没开通发信，请联系管理员');
+    toast(state.me.is_admin ? '还没开通发信：到「账号和地址 → 发信」填 Resend Key' : '还没开通发信，请联系管理员');
     return;
   }
   cf.reset(); $('#fileNames').textContent = ''; $('#sendErr').textContent = '';
@@ -449,7 +487,7 @@ cf.addEventListener('submit', async (e) => {
   finally { btn.disabled = false; btn.lastElementChild.textContent = '发送'; }
 });
 
-// ---------- 页面：临时邮箱、设置、管理中心 ----------
+// ---------- 页面：临时邮箱、设置、管理 ----------
 const page = $('#page');
 const DAY_MS = 86400000;
 const copyText = async (t) => { try { await navigator.clipboard.writeText(t); toast(`已复制 ${t}`); } catch { toast(t); } };
@@ -466,38 +504,60 @@ function closePage() {
 async function openPage(name) {
   if (name === 'settings/temp') name = 'admin/temps';
   if (name === 'admin/notify') name = 'settings/notify';
+  if (name === 'admin') name = 'admin/overview';
   const [base, tab] = name.split('/');
   if (!PAGES[base]) return;
   $('#app').classList.add('paging'); $('#app').classList.remove('menu', 'reading');
   page.classList.remove('hidden');
   $$('#folders a').forEach((a) => a.classList.remove('on'));
-  $$('[data-p]').forEach((a) => a.classList.toggle('on', a.dataset.p === base));
+  // 侧栏高亮:管理分成「概览」和「账号和地址」两项
+  const key = base === 'admin' ? (tab === 'overview' || !tab ? 'admin/overview' : 'admin/users') : base;
+  $$('[data-p]').forEach((a) => a.classList.toggle('on', a.dataset.p === key));
   if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
   try { await PAGES[base](tab); } catch (x) { toast(x.message); }
 }
 $$('[data-p]').forEach((a) => (a.onclick = () => openPage(a.dataset.p)));
 
-// 页面骨架:标题行(右边放这一页的操作) + 下面一块块白色内容
+// 页头:标题 + 一句说明;右边放这一页的主要操作
 function head(title, desc, right = '') {
-  return `<header class="pg-head">
-    <div class="page-title"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ''}</div><div class="pg-actions" id="pgActions">${right}</div></header>`;
+  return `<header class="ph"><div class="ph-t"><h1>${title}</h1>${desc ? `<p>${desc}</p>` : ''}</div><div class="ph-a" id="pgActions">${right}</div></header>`;
 }
-const searchBox = (id, ph) => `<div class="search">${icon('search')}<input id="${id}" type="search" placeholder="${ph}"></div>`;
-// 筛选栏:左边快速筛选,右边排序
-function filterBar(chips, sorts) {
-  return `<div class="blk fbar">
-    ${chips.map(([k, t, n], i) => `<button type="button" class="fchip ${i ? '' : 'on'}" data-f="${k}">${t} ${n}</button>`).join('')}
-    <span class="spacer"></span>
-    ${sorts ? `<select class="sort-sel" id="sortSel">${sorts.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>` : ''}
+const tabsBar = (list, cur, attr) => `<nav class="tabs">${list.map(([k, t]) => `<a ${attr}="${k}" class="${k === cur ? 'on' : ''}">${t}</a>`).join('')}</nav>`;
+// 设置分区:左边标题和说明,右边控件
+const sec = (title, desc, body) => `<section class="sec"><div class="sec-l"><h3>${title}</h3>${desc ? `<p>${desc}</p>` : ''}</div><div class="sec-r">${body}</div></section>`;
+const searchBox = (id, ph) => `<label class="search">${icon('search', 'sm')}<input id="${id}" type="search" placeholder="${ph}"></label>`;
+
+// 表格框:顶部工具栏(分段筛选 + 搜索 + 排序)、表格、底部总数
+function tableBox({ chips, sorts, search, extra = '' }, table, n, unit) {
+  return `<div class="tbox">
+    <div class="tbar">
+      ${chips ? `<div class="seg">${chips.map(([k, t, c], i) => `<a data-f="${k}" class="${i ? '' : 'on'}">${t}${c !== undefined ? ` <i>${c}</i>` : ''}</a>`).join('')}</div>` : ''}
+      <span class="spacer"></span>${extra}
+      ${search ? searchBox(search[0], search[1]) : ''}
+      ${sorts ? `<select class="sort-sel" id="sortSel">${sorts.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>` : ''}
+    </div>
+    ${table}
+    <div class="tfoot">共 <span data-total>${n}</span> ${unit}</div>
   </div>`;
 }
-const tblFoot = (n, unit) => `<div class="tbl-foot">共 <span data-total>${n}</span> ${unit}</div>`;
-// 行上带 data-st(状态标签,空格分开)、data-q(搜索文字)、data-s1/s2/s3(排序值)
+// 行尾「⋯」菜单:items = [[标签, 图标, 属性串, 是否危险]]
+const rowMenu = (items) => `<td class="acts"><button type="button" class="more" data-more title="更多操作" aria-label="更多操作">${icon('dots', 'sm')}</button>
+  <div class="rmenu hidden">${items.filter(Boolean).map(([t, ic, attrs, danger]) => `${danger ? '<hr>' : ''}<button type="button" class="${danger ? 'danger' : ''}" ${attrs}>${icon(ic, 'sm')}${t}</button>`).join('')}</div></td>`;
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-more]');
+  $$('.rmenu').forEach((m) => { if (!b || m !== b.nextElementSibling) m.classList.add('hidden'); });
+  $$('.more.open').forEach((x) => { if (x !== b) x.classList.remove('open'); });
+  if (b) { const m = b.nextElementSibling; m.classList.toggle('hidden'); b.classList.toggle('open', !m.classList.contains('hidden')); }
+  else if (e.target.closest('.rmenu button')) $$('.rmenu').forEach((m) => m.classList.add('hidden'));
+});
+
+// 行上带 data-st(状态,空格分开)、data-q(搜索文字)、data-s1/s2/s3(排序值)
 function wireList(tbody, { searchEl, sortEl } = {}) {
   if (!tbody) return;
+  const box = tbody.closest('.tbox');
   const rows = () => [...tbody.children];
   const apply = () => {
-    const f = $('.fchip.on', page)?.dataset.f || 'all';
+    const f = $('.seg a.on', box)?.dataset.f || 'all';
     const q = (searchEl?.value || '').trim().toLowerCase();
     let n = 0;
     rows().forEach((tr) => {
@@ -505,8 +565,7 @@ function wireList(tbody, { searchEl, sortEl } = {}) {
       tr.style.display = ok ? '' : 'none';
       if (ok) n++;
     });
-    const c = $('[data-total]', page);
-    if (c) c.textContent = n;
+    $('[data-total]', box).textContent = n;
   };
   const sort = () => {
     if (!sortEl) return;
@@ -517,19 +576,18 @@ function wireList(tbody, { searchEl, sortEl } = {}) {
       return dir === 'desc' ? -c : c;
     }).forEach((tr) => tbody.appendChild(tr));
   };
-  $$('.fchip', page).forEach((b) => (b.onclick = () => { $$('.fchip', page).forEach((x) => x.classList.toggle('on', x === b)); apply(); }));
+  $$('.seg a', box).forEach((b) => (b.onclick = () => { $$('.seg a', box).forEach((x) => x.classList.toggle('on', x === b)); apply(); }));
   if (searchEl) searchEl.oninput = apply;
   if (sortEl) sortEl.onchange = sort;
   sort();
 }
-function wire(root = page) {
-  $('#meMenu').classList.add('hidden');
-}
+function wire() { $('#meMenu').classList.add('hidden'); }
 
-// 通用编辑弹窗：fields 是表单 HTML,onSave(FormData) 抛错时显示在弹窗里
-function editDialog(title, fields, onSave, saveText = '保存') {
+// 通用弹窗:fields 是表单 HTML;onSave 抛错时显示在弹窗里;desc 是标题下的一句说明
+function editDialog(title, fields, onSave, saveText = '保存', desc = '') {
   const d = $('#editDlg');
   $('#editTitle').textContent = title;
+  $('#editDesc').textContent = desc; $('#editDesc').classList.toggle('hidden', !desc);
   $('#editBody').innerHTML = fields;
   $('#editErr').textContent = '';
   $('#editForm button[type=submit]').textContent = saveText;
@@ -539,29 +597,27 @@ function editDialog(title, fields, onSave, saveText = '保存') {
     try { await onSave(new FormData(e.target), e.target); d.close(); } catch (x) { $('#editErr').textContent = x.message; }
   };
   d.showModal();
-  const first = $('input:not([type=hidden]):not([type=checkbox]), textarea', $('#editBody'));
+  const first = $('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea', $('#editBody'));
   if (first) first.focus();
 }
 
-// 两种转发方式：cf 原样转发(要在 Cloudflare 验证目标邮箱);send 通过 Resend 重新发出(免验证)
+// 两种转发方式:cf 原样转发(要在 Cloudflare 验证目标邮箱);send 通过 Resend 重新发出(免验证)
 function fwdModeField(mode = 'cf', name = 'fwd_mode') {
   const can = state.me.can_resend;
   return `<div class="field"><span class="field-title">转发方式</span>
     <div class="choice">
       <label class="radio-card"><input type="radio" name="${name}" value="cf" ${mode !== 'send' ? 'checked' : ''}>
-        <span><strong>直接转发</strong><span class="muted sm">原样转发，需在 Cloudflare 验证目标邮箱</span></span></label>
+        <span><strong>直接转发</strong><span class="muted sm">原样转发，需要先在 Cloudflare 验证目标邮箱</span></span></label>
       <label class="radio-card ${can ? '' : 'off'}"><input type="radio" name="${name}" value="send" ${mode === 'send' ? 'checked' : ''} ${can ? '' : 'disabled'}>
-        <span><strong>通过发信服务转发</strong><span class="muted sm">${can ? '无需验证，占用发信额度' : '需先开通发信'}</span></span></label>
+        <span><strong>通过发信服务转发</strong><span class="muted sm">${can ? '不用验证，会占用发信额度' : '需要先开通发信'}</span></span></label>
     </div></div>`;
 }
 
-// ---------- 临时邮箱收件地址(管理中心 → 临时邮箱) ----------
-// r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
+// ---------- 临时邮箱收件规则(管理 → 账号和地址 → 临时邮箱) ----------
 function tempTargetPanel(r) {
   const custom = !!r.catch_all_fwd;
   const box = r.catch_all || state.me.address;
-  return `<form class="panel" data-target>
-    <div class="sec-head"><h2>临时邮箱收件地址</h2></div>
+  return `<form class="card-form" data-target>${sec('收件规则', '发到临时地址的信送到哪里。', `
     <div class="choice">
       <label class="radio-card"><input type="radio" name="mode" value="admin" ${custom ? '' : 'checked'}>
         <span><strong>管理员邮箱</strong><span class="muted sm">${esc(box)}</span></span></label>
@@ -571,11 +627,9 @@ function tempTargetPanel(r) {
     <div data-custom class="stack ${custom ? '' : 'hidden'}">
       <label>收件邮箱<input name="fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="例如 you@gmail.com"></label>
       ${fwdModeField(r.catch_all_fwd_mode)}
-      <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}>
-        管理员邮箱里也保留一份</label>
+      <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}> 管理员邮箱里也保留一份</label>
     </div>
-    <div class="actions"><button class="primary" type="submit">保存</button></div>
-  </form>`;
+    <div class="actions"><button class="primary" type="submit">保存</button></div>`)}</form>`;
 }
 
 function wireTempTarget(form, r, after) {
@@ -597,48 +651,49 @@ function wireTempTarget(form, r, after) {
 }
 
 // ---------- 临时邮箱 ----------
-// 默认规则(=兜底规则)当前送到哪，用来显示自动地址的去向
 let tempDefaults = null;
-function defaultChips() {
+function defaultTo() {
   const d = tempDefaults;
-  if (!d) return `<span class="chip">跟随默认规则</span>`;
+  if (!d) return '跟随默认规则';
   const parts = [];
-  if (d.box) parts.push(`<span class="chip">${icon('inbox', 'sm')}${d.box === state.me.address ? '我的邮箱' : esc(d.box)}</span>`);
-  if (d.fwd) parts.push(`<span class="chip">${icon('forward', 'sm')}${esc(d.fwd)}</span>`);
-  return parts.join('') || '<span class="chip">退回</span>';
+  if (d.box) parts.push(d.box === state.me.address ? '我的收件箱' : esc(d.box));
+  if (d.fwd) parts.push(`转发到 ${esc(d.fwd)}`);
+  return parts.join('，') || '退回';
 }
 
-function tempBar(items) {
+function tempTable(items, showOwner, reload) {
   const now = Date.now();
-  const n = (f) => items.filter(f).length;
   const exp = (a) => a.expires_at && a.expires_at < now;
-  return filterBar([['all', '全部', items.length], ['on', '使用中', n((a) => a.enabled && !exp(a))], ['off', '已停用', n((a) => !a.enabled)], ['exp', '已过期', n((a) => a.enabled && exp(a))]],
-    [['1:desc', '按最近收信'], ['2:desc', '按收到数量'], ['3:asc', '按地址']]);
-}
-
-function tempRows(items, showOwner, reload) {
-  if (!items.length) return `<div class="blk"><div class="empty small">${icon('mailclock')}<p>还没有临时地址</p></div></div>`;
-  const now = Date.now();
+  const n = (f) => items.filter(f).length;
   const rows = items.map((a) => {
-    const expired = a.expires_at && a.expires_at < now;
-    const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : badge('ok', '使用中');
-    const to = a.auto ? defaultChips() : `<span class="chip">${icon('inbox', 'sm')}${a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '')}</span>`;
-    const exp = a.expires_at ? (expired ? '已过期' : `${fmtDay(a.expires_at)} 到期`) : '永久';
+    const expired = exp(a);
+    const soon = !expired && a.expires_at && a.expires_at - now < 3 * DAY_MS;
+    const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : soon ? badge('warn', `${fmtDay(a.expires_at)} 到期`) : badge('ok', a.expires_at ? `${fmtDay(a.expires_at)} 到期` : '使用中');
+    const to = a.auto ? defaultTo() : a.owner === state.me.address ? '我的收件箱' : esc(a.owner || '');
     return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
-      <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
+      <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="copy" data-copy="${esc(a.address)}" title="复制">${icon('copy', 'sm')}</button></div>${a.note ? `<div class="sub">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
-      <td><div class="chips">${to}</div>${a.auto ? '' : ''}</td>
-      <td>${st}<div class="muted sm">${exp}</div></td>
-      <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
-      <td class="acts">
-        <button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}">查看信</button>
-        <button class="lnk" data-tedit="${esc(a.address)}">编辑</button>
-        <button class="lnk" data-ttoggle="${esc(a.address)}" data-on="${a.enabled}" title="${a.enabled ? '停用后发来的信会被退回' : ''}">${a.enabled ? '停用' : '启用'}</button>
-        <button class="lnk danger" data-tdel="${esc(a.address)}">删除</button>
-      </td></tr>`;
+      <td>${st}</td>
+      <td>${to}</td>
+      <td class="num">${a.hits}</td>
+      <td class="nowrap">${a.last_at ? fmtDate(a.last_at) : '<span class="muted">还没收到</span>'}</td>
+      ${rowMenu([
+        ['查看收到的信', 'inbox', `data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}"`],
+        ['编辑备注和有效期', 'edit', `data-tedit="${esc(a.address)}"`],
+        ['复制地址', 'copy', `data-copy="${esc(a.address)}"`],
+        [a.enabled ? '停用' : '启用', 'power', `data-ttoggle="${esc(a.address)}" data-on="${a.enabled}"`],
+        ['删除', 'trash', `data-tdel="${esc(a.address)}"`, true],
+      ])}</tr>`;
   }).join('');
   setTimeout(() => wireTemp(items, reload));
-  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th>操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
+  const table = items.length
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>状态</th><th>送到</th><th class="num">收到</th><th>最近收信</th><th class="acts"></th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>`
+    : `<div class="empty small">${icon('mailclock')}<p>还没有临时地址</p></div>`;
+  return tableBox({
+    chips: [['all', '全部', items.length], ['on', '使用中', n((a) => a.enabled && !exp(a))], ['off', '已停用', n((a) => !a.enabled)], ['exp', '已过期', n((a) => a.enabled && exp(a))]],
+    sorts: [['1:desc', '按最近收信'], ['2:desc', '按收到数量'], ['3:asc', '按地址']],
+    search: ['tempQ', '搜索地址或备注'],
+  }, table, items.length, '个');
 }
 
 function wireTemp(items, reload) {
@@ -654,14 +709,14 @@ function wireTemp(items, reload) {
     try { await api(`/temp/${encodeURIComponent(b.dataset.ttoggle)}`, { method: 'PATCH', json: { enabled: b.dataset.on !== '1' } }); reload(); } catch (x) { toast(x.message); }
   }));
   $$('[data-tdel]', page).forEach((b) => (b.onclick = async () => {
-    if (!confirm(`删除 ${b.dataset.tdel}?已收到的信会保留。`)) return;
+    if (!confirm(`删除 ${b.dataset.tdel}？已收到的信会保留。`)) return;
     try { await api(`/temp/${encodeURIComponent(b.dataset.tdel)}`, { method: 'DELETE' }); reload(); } catch (x) { toast(x.message); }
   }));
   $$('[data-tedit]', page).forEach((b) => (b.onclick = () => {
     const a = items.find((x) => x.address === b.dataset.tedit);
     editDialog(`编辑 ${a.address}`, `
       <label>备注<input name="note" value="${esc(a.note)}" placeholder="例如：哪个网站用的"></label>
-      <label>有效期<select name="days"><option value="keep">不改(${a.expires_at ? fmtDay(a.expires_at) + ' 到期' : '永久'})</option><option value="0">改成永久</option><option value="1">从现在起 1 天</option><option value="7">从现在起 7 天</option><option value="30">从现在起 30 天</option></select></label>`, async (f) => {
+      <label>有效期<select name="days"><option value="keep">不改（${a.expires_at ? fmtDay(a.expires_at) + ' 到期' : '永久'}）</option><option value="0">改成永久</option><option value="1">从现在起 1 天</option><option value="7">从现在起 7 天</option><option value="30">从现在起 30 天</option></select></label>`, async (f) => {
       const j = { note: f.get('note') };
       if (f.get('days') !== 'keep') j.days = Number(f.get('days'));
       await api(`/temp/${encodeURIComponent(a.address)}`, { method: 'PATCH', json: j });
@@ -670,40 +725,34 @@ function wireTemp(items, reload) {
   }));
 }
 
-function newTempDialog(domain) {
-  editDialog('新建临时地址', `
-    <label>地址
-      <div class="addr-input"><input name="local" placeholder="留空就随机生成" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span>
-      <button type="button" class="icon-btn" data-rand title="随机生成一个">${icon('dice')}</button></div></label>
-    <div class="form-grid">
-      <label>备注<input name="note" placeholder="例如：某购物网站" maxlength="100"></label>
-      <label>有效期<select name="days"><option value="0">永久</option><option value="1">1 天</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
-    </div>`, async (f) => {
-    const r = await api('/temp', { method: 'POST', json: { local: f.get('local'), note: f.get('note'), days: Number(f.get('days')) } });
-    state.me = await api('/me');
-    await pageTemp();
-    copyText(r.address);
-  }, '创建');
-  $('#editBody [data-rand]').onclick = () => {
-    const abc = 'abcdefghijkmnpqrstuvwxyz23456789';
-    $('#editForm').local.value = [...crypto.getRandomValues(new Uint8Array(10))].map((n) => abc[n % abc.length]).join('');
-  };
-}
+const randLocal = () => { const abc = 'abcdefghijkmnpqrstuvwxyz23456789'; return [...crypto.getRandomValues(new Uint8Array(10))].map((n) => abc[n % abc.length]).join(''); };
 
 async function pageTemp() {
   const all = state.me.is_admin && state.tempAll;
   const { items, domain, defaults } = await api('/temp' + (all ? '?all=1' : ''));
   tempDefaults = defaults || null;
-  const d = defaults;
-  page.innerHTML = `<div class="pg-col">${head('临时邮箱', `任意前缀 <code>@${esc(domain)}</code> 都能直接收信`, `
-    ${searchBox('tempQ', '搜索地址或备注')}
-    ${state.me.is_admin ? `<label class="check"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
-    <button class="primary" id="newTemp">${icon('plus')}新建</button>`)}
-    ${tempBar(items)}
-    ${tempRows(items, all, pageTemp)}
+  page.innerHTML = `<div class="pg">${head('临时邮箱', `任意前缀 @${esc(domain)} 都能直接收信，用完可以停用或删除。`,
+    state.me.is_admin ? `<label class="check"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 显示所有人的</label>` : '')}
+    <form class="quick" id="quickTemp">
+      <div class="addr-input"><input name="local" placeholder="输入前缀，留空随机生成" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div>
+      <button type="button" class="icon-btn" id="tempRand" title="随机生成">${icon('dice')}</button>
+      <select name="days" title="有效期"><option value="0">永久有效</option><option value="1">1 天</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select>
+      <button class="primary" type="submit">${icon('plus')}创建并复制</button>
+    </form>
+    ${tempTable(items, all, pageTemp)}
   </div>`;
   wire();
-  $('#newTemp').onclick = () => newTempDialog(domain);
+  const qf = $('#quickTemp');
+  $('#tempRand').onclick = () => { qf.local.value = randLocal(); qf.local.focus(); };
+  qf.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/temp', { method: 'POST', json: { local: qf.local.value.trim(), note: '', days: Number(qf.days.value) } });
+      state.me = await api('/me');
+      await pageTemp();
+      copyText(r.address);
+    } catch (x) { toast(x.message); }
+  };
   if ($('#tempAll')) $('#tempAll').onchange = (e) => { state.tempAll = e.target.checked; pageTemp(); };
   wireList($('.temp-rows', page), { searchEl: $('#tempQ'), sortEl: $('#sortSel', page) });
 }
@@ -712,102 +761,68 @@ async function pageTemp() {
 // Cloudflare Workers 开不了 IMAP/POP3 服务，所以客户端收信靠「转发到外部邮箱」，发信走 Resend 的 SMTP
 function clientPanel() {
   const me = state.me;
-  const row = (k, v, copy = true) => `<tr><td class="muted nowrap">${k}</td><td><div class="addr-cell"><code>${esc(v)}</code>${copy ? `<button class="icon-btn xs" type="button" data-copy="${esc(v)}" title="复制">${icon('copy')}</button>` : ''}</div></td></tr>`;
-  const pass = me.is_admin
-    ? 'Resend API Key（建议每人单独建一个 Sending access 的 Key）'
-    : 'Resend API Key，向管理员索取';
-  return `<section class="panel">
-    <h2>在 Foxmail / Outlook 中使用</h2>
-    <div class="subs">
-    <div class="sub"><h3>收信</h3>
-    <p class="hint">在「转发」里转到 QQ 邮箱或 Gmail，再在客户端里添加那个邮箱。</p></div>
-    <div class="sub"><h3>发信</h3>
-    ${me.can_send ? '' : `<p class="hint">还没开通发信${me.is_admin ? `，<a data-goto-send>去开通</a>` : ''}</p>`}
-    <div class="table-wrap"><table class="tbl mini"><tbody>
-      ${row('发件服务器（SMTP）', 'smtp.resend.com')}
+  const row = (k, v, copy = true) => `<tr><td class="muted nowrap">${k}</td><td><div class="addr-cell"><code>${esc(v)}</code>${copy ? `<button class="copy" type="button" data-copy="${esc(v)}" title="复制">${icon('copy', 'sm')}</button>` : ''}</div></td></tr>`;
+  const pass = me.is_admin ? 'Resend API Key（建议每人单独建一个 Sending access 的 Key）' : 'Resend API Key，向管理员索取';
+  return sec('收信', '客户端不能直接收这里的信，要先转发出去。', `<p class="hint">在「收信与转发」里转到 QQ 邮箱或 Gmail，再在 Foxmail、Outlook 里添加那个邮箱。</p>`)
+    + sec('发信', '在客户端里用下面的 SMTP 设置，就能用这个地址发信。', `
+    ${me.can_send ? '' : `<p class="hint">还没开通发信${me.is_admin ? '，<a data-goto-send>去开通</a>' : ''}</p>`}
+    <table class="tbl mini"><tbody>
+      ${row('发件服务器', 'smtp.resend.com')}
       ${row('端口', '465')}
       ${row('加密', 'SSL/TLS（或 587 + STARTTLS）', false)}
       ${row('用户名', 'resend')}
-      <tr><td class="muted nowrap">密码</td><td class="sm">${pass}</td></tr>
+      <tr><td class="muted nowrap">密码</td><td>${pass}</td></tr>
       ${row('发件人地址', me.address)}
-    </tbody></table></div></div>
-    </div>
-  </section>`;
+    </tbody></table>`);
 }
 
-// ---------- 个人设置：分类标签页，和管理中心同一种结构 ----------
-const SETTINGS_TABS = [
-  ['account', '账户', 'user'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'autoreply'],
-  ['notify', '通知', 'bell'], ['client', '客户端', 'devices'],
-];
+// ---------- 设置 ----------
+const SETTINGS_TABS = [['account', '账户'], ['forward', '收信与转发'], ['autoreply', '自动回复'], ['notify', '通知'], ['client', '在客户端使用']];
 async function pageSettings(tab = 'account') {
-  const tabs = SETTINGS_TABS.filter((t) => !t[3] || state.me.is_admin);
-  if (!tabs.some((t) => t[0] === tab)) tab = 'account';
+  if (!SETTINGS_TABS.some((t) => t[0] === tab)) tab = 'account';
   const s = await api('/settings');
   const pct = s.quota_mb ? Math.min(100, (s.used / (s.quota_mb * 1048576)) * 100) : 0;
   const body = {
-    account: `
-    <section class="panel">
-      <h2>用量</h2>
+    account: sec('用量', '存储空间和发信额度。', `
       <div class="usage">
         <div><div class="muted sm">存储</div><div class="big">${fmtSize(s.used)}<span class="muted"> / ${s.quota_mb ? s.quota_mb + ' MB' : '不限'}</span></div>
           ${s.quota_mb ? `<div class="meter"><span style="width:${pct}%"></span></div>` : ''}</div>
         <div><div class="muted sm">最近 24 小时发信</div><div class="big">${s.sent_24h}<span class="muted"> / ${s.send_limit ? s.send_limit + ' 封' : '不限'}</span></div></div>
-      </div>
-    </section>
-    <form class="panel" data-sec>
-      <h2>个人资料</h2>
-      <label>邮箱地址<input value="${esc(state.me.address)}" disabled></label>
-      <label>显示名称<input name="name" value="${esc(s.name)}" maxlength="80"></label>
-      <label>签名<textarea name="signature" rows="4">${esc(s.signature)}</textarea></label>
-      <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form>
-    <form class="panel" id="pwForm2">
-      <h2>修改密码</h2>
-      <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
-      <label>新密码<input name="password" type="password" autocomplete="new-password" minlength="10" required placeholder="至少 10 位"></label>
-      <div class="actions"><span class="error" id="pwErr"></span><button class="primary" type="submit">修改密码</button></div>
-    </form>`,
-    forward: `
-    <form class="panel" data-sec>
-      <h2>转发到外部邮箱</h2>
-      <label>转发到<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
-      ${fwdModeField(s.fwd_mode)}
-      <label class="check"><input type="checkbox" name="fwd_keep" ${s.fwd_keep ? 'checked' : ''}> 转发后在这里也保留一份</label>
-      <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form>`,
-    autoreply: `
-    <form class="panel" data-sec>
-      <h2>自动回复</h2>
-      <label class="switch"><input type="checkbox" name="ar_on" ${s.ar_on ? 'checked' : ''}><span class="track"></span>开启自动回复</label>
-      <label>主题<input name="ar_subject" value="${esc(s.ar_subject)}" placeholder="留空就用「自动回复：原主题」"></label>
-      <label>内容<textarea name="ar_body" rows="5" placeholder="你好，我这几天休假，回来后会尽快回复你。">${esc(s.ar_body)}</textarea></label>
-      <label>截止日期<input name="ar_until" type="date" value="${s.ar_until ? fmtDay(s.ar_until - 1) : ''}"></label>
-      <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form>`,
+      </div>`)
+      + `<form data-sec>${sec('个人资料', '名称会显示在你发出的信里，签名自动加在正文末尾。', `
+        <label>邮箱地址<input value="${esc(state.me.address)}" disabled></label>
+        <label>显示名称<input name="name" value="${esc(s.name)}" maxlength="80"></label>
+        <label>签名<textarea name="signature" rows="4">${esc(s.signature)}</textarea></label>`)}</form>`
+      + `<form id="pwForm2">${sec('修改密码', '修改后，其他设备需要重新登录。', `
+        <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
+        <label>新密码<input name="password" type="password" autocomplete="new-password" minlength="10" required placeholder="至少 10 位"></label>
+        <div class="actions"><button type="submit">修改密码</button><span class="error" id="pwErr"></span></div>`)}</form>`,
+    forward: `<form data-sec>${sec('转发到外部邮箱', '新邮件同时发到 Gmail、QQ 邮箱等，留空就不转发。', `
+        <label>转发地址<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
+        ${fwdModeField(s.fwd_mode)}`)}
+      ${sec('保留副本', '转发后这里是否还留一份。', `<label class="switch"><input type="checkbox" name="fwd_keep" ${s.fwd_keep ? 'checked' : ''}><span class="track"></span>转发后在这里也保留一份</label>`)}</form>`,
+    autoreply: `<form data-sec>${sec('自动回复', '开启后，收到信会自动回一封；同一个人 4 天内只回一次。', `<label class="switch"><input type="checkbox" name="ar_on" ${s.ar_on ? 'checked' : ''}><span class="track"></span>开启自动回复</label>`)}
+      ${sec('回复内容', '', `
+        <label>主题<input name="ar_subject" value="${esc(s.ar_subject)}" placeholder="留空就用「自动回复：原主题」"></label>
+        <label>内容<textarea name="ar_body" rows="5" placeholder="你好，我这几天休假，回来后会尽快回复你。">${esc(s.ar_body)}</textarea></label>`)}
+      ${sec('截止日期', '到这天结束后自动关闭，留空就一直开着。', `<label><input name="ar_until" type="date" value="${s.ar_until ? fmtDay(s.ar_until - 1) : ''}"></label>`)}</form>`,
     client: clientPanel(),
-    notify: !s.tg_bot ? `
-    <section class="panel">
-      <h2>Telegram 通知</h2>
-      <p class="status-line">${badge('neutral', '未开通')}<span class="muted">${state.me.is_admin ? '先在上面设置机器人' : '管理员还没设置 Telegram 机器人'}</span></p>
-    </section>` : !s.tg_bound ? `
-    <section class="panel">
-      <h2>Telegram 通知</h2>
-      <p class="status-line">${badge('neutral', '未绑定')}<span class="muted">新邮件推送到你的 Telegram</span></p>
-      <div class="actions"><button class="primary" type="button" id="tgBind">绑定 Telegram</button></div>
-      <p class="muted sm hidden" id="tgWait">在 Telegram 里点「开始」，完成后这里会自动刷新。</p>
-    </section>` : `
-    <form class="panel" data-sec>
-      <h2>Telegram 通知</h2>
-      <p class="status-line">${badge('ok', '已绑定')}<span class="muted">机器人 @${esc(s.tg_bot)}</span></p>
-      <label class="check"><input type="checkbox" name="tg_body" ${s.tg_body ? 'checked' : ''}> 推送正文摘要</label>
-      <label class="check"><input type="checkbox" name="tg_bulk" ${s.tg_bulk ? 'checked' : ''}> 群发、订阅类邮件也推送</label>
-      <div class="actions"><button class="primary" type="submit">保存</button><button type="button" id="tgTest">发送测试消息</button><button type="button" id="tgUnbind">解除绑定</button></div>
-    </form>`,
+    notify: !s.tg_bot
+      ? sec('Telegram 通知', '新邮件推送到你的 Telegram。', `<p class="status-line">${badge('neutral', '未开通')}<span class="muted">${state.me.is_admin ? '先在上面设置机器人' : '管理员还没设置 Telegram 机器人'}</span></p>`)
+      : !s.tg_bound
+        ? sec('Telegram 通知', '新邮件推送到你的 Telegram。', `<p class="status-line">${badge('neutral', '未绑定')}<span class="muted">机器人 @${esc(s.tg_bot)}</span></p>
+          <div class="actions"><button class="primary" type="button" id="tgBind">绑定 Telegram</button></div>
+          <p class="muted sm hidden" id="tgWait">在 Telegram 里点「开始」，完成后这里会自动刷新。</p>`)
+        : `<form data-sec>${sec('Telegram 通知', '新邮件推送到你的 Telegram。', `<p class="status-line">${badge('ok', '已绑定')}<span class="muted">机器人 @${esc(s.tg_bot)}</span></p>
+          <label class="switch"><input type="checkbox" name="tg_body" ${s.tg_body ? 'checked' : ''}><span class="track"></span>推送正文摘要</label>
+          <label class="switch"><input type="checkbox" name="tg_bulk" ${s.tg_bulk ? 'checked' : ''}><span class="track"></span>群发、订阅类邮件也推送</label>
+          <div class="actions"><button type="button" id="tgTest">发送测试消息</button><button type="button" id="tgUnbind">解除绑定</button></div>`)}</form>`,
   }[tab];
-  page.innerHTML = `<div class="pg-col">${head('设置')}
-  <div class="blk tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
-  <div class="pg-stack">${tab === 'notify' && state.me.is_admin ? '<div id="tgAdmin" class="pg-stack"></div>' : ''}${body}</div></div>`;
+  page.innerHTML = `<div class="pg">${head('设置', '你的账户、收信转发和通知。')}
+    ${tabsBar(SETTINGS_TABS, tab, 'data-stab')}
+    <div class="secs">${tab === 'notify' && state.me.is_admin ? '<div id="tgAdmin"></div>' : ''}${body}</div>
+    <div class="savebar hidden" id="saveBar"><span class="msg">有修改还没保存</span><button type="button" class="ghost" id="saveUndo">撤销</button><button type="button" class="primary" id="saveDo">保存修改</button></div>
+  </div>`;
   wire();
   if ($('#tgAdmin')) await ADMIN.notify($('#tgAdmin'));
   $$('[data-stab]', page).forEach((a) => (a.onclick = () => openPage('settings/' + a.dataset.stab)));
@@ -834,17 +849,28 @@ async function pageSettings(tab = 'account') {
     if (!confirm('解除后不再推送新邮件，确定吗？')) return;
     try { await api('/tg/unbind', { method: 'POST' }); toast('已解除绑定'); pageSettings('notify'); } catch (x) { toast(x.message); }
   };
-  $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
-    e.preventDefault();
-    const f = new FormData(form), j = {};
-    for (const el of form.elements) {
-      if (!el.name) continue;
-      if (el.type === 'checkbox') j[el.name] = el.checked;
-      else if (el.name === 'ar_until') j.ar_until = el.value ? new Date(el.value + 'T00:00:00').getTime() + DAY_MS : 0;
-      else j[el.name] = f.get(el.name);
+  // 改了内容才出现保存条;保存时把这一页所有设置一起提交
+  const forms = $$('form[data-sec]', page);
+  const bar = $('#saveBar');
+  forms.forEach((form) => {
+    form.addEventListener('input', () => bar.classList.remove('hidden'));
+    form.addEventListener('change', () => bar.classList.remove('hidden'));
+    form.onsubmit = (e) => { e.preventDefault(); $('#saveDo').click(); };
+  });
+  $('#saveUndo').onclick = () => pageSettings(tab);
+  $('#saveDo').onclick = async () => {
+    const j = {};
+    for (const form of forms) {
+      const f = new FormData(form);
+      for (const el of form.elements) {
+        if (!el.name) continue;
+        if (el.type === 'checkbox') j[el.name] = el.checked;
+        else if (el.name === 'ar_until') j.ar_until = el.value ? new Date(el.value + 'T00:00:00').getTime() + DAY_MS : 0;
+        else j[el.name] = f.get(el.name);
+      }
     }
-    try { await api('/settings', { method: 'POST', json: j }); state.me = await api('/me'); toast('已保存'); } catch (x) { toast(x.message); }
-  }));
+    try { await api('/settings', { method: 'POST', json: j }); state.me = await api('/me'); bar.classList.add('hidden'); toast('已保存'); } catch (x) { toast(x.message); }
+  };
   if ($('#pwForm2')) $('#pwForm2').onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -854,18 +880,15 @@ async function pageSettings(tab = 'account') {
   };
 }
 
-// ---------- 管理中心 ----------
-const ADMIN_TABS = [
-  ['overview', '概览', 'chart'], ['users', '账号', 'users'], ['addresses', '别名和群组', 'at'],
-  ['temps', '临时邮箱', 'mailclock'], ['brand', '品牌', 'palette'], ['send', '发信', 'send'], ['logs', '记录', 'history'],
-];
+// ---------- 管理:概览 / 账号和地址 ----------
+const ADMIN_TABS = [['users', '账号'], ['addresses', '别名和群组'], ['temps', '临时邮箱'], ['send', '发信'], ['brand', '品牌'], ['logs', '记录']];
 
 async function pageAdmin(tab = 'overview') {
   if (!state.me.is_admin) return;
-  if (!ADMIN_TABS.some((t) => t[0] === tab)) tab = 'overview';
-  page.innerHTML = `<div class="pg-col">${head('管理中心')}
-    <div class="blk tabs" role="tablist">${ADMIN_TABS.map(([k, t, ic]) => `<a data-tab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
-    <div class="pg-stack" id="tabBody"><div class="blk"><div class="empty small"><p>加载中…</p></div></div></div></div>`;
+  if (tab !== 'overview' && !ADMIN_TABS.some((t) => t[0] === tab)) tab = 'overview';
+  page.innerHTML = tab === 'overview'
+    ? `<div class="pg">${head('概览', '最近的收发情况和需要处理的问题。')}<div id="tabBody"></div></div>`
+    : `<div class="pg">${head('账号和地址', '管理邮箱账号、别名、临时邮箱和发信。')}${tabsBar(ADMIN_TABS, tab, 'data-tab')}<div id="tabBody" class="tab-body"></div></div>`;
   wire();
   $$('[data-tab]', page).forEach((a) => (a.onclick = () => openPage('admin/' + a.dataset.tab)));
   await ADMIN[tab]($('#tabBody'));
@@ -882,32 +905,30 @@ const ADMIN = {
     const o = await api('/admin/overview');
     const days = Array.from({ length: 14 }, (_, i) => { const d = 13 - i; const r = o.days.find((x) => x.d === d) || {}; return { d, recv: r.recv || 0, sent: r.sent || 0 }; });
     const max = Math.max(1, ...days.map((x) => x.recv));
-    const label = (d) => { const t = new Date(Date.now() - d * DAY_MS); return `${t.getMonth() + 1}/${t.getDate()}`; };
-    const tile = (k, v, sub = '') => `<div class="blk tile"><div class="muted sm">${k}</div><div class="tile-v">${v}</div>${sub ? `<div class="muted sm">${sub}</div>` : ''}</div>`;
+    const topMax = Math.max(1, ...o.top.map((t) => t.n));
+    const label = (d) => { if (!d) return '今天'; const t = new Date(Date.now() - d * DAY_MS); return `${t.getMonth() + 1}/${t.getDate()}`; };
+    const kpi = (k, v, sub = '') => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="c">${sub}</div></div>`;
     const alerts = [];
-    if (!o.can_send) alerts.push(`<div class="blk alert">${icon('send')}<span>还没开通发信，账号只能收信。</span><a data-goto="send">去设置</a></div>`);
-    if (o.fwd_fail_7d) alerts.push(`<div class="blk alert bad">${icon('forward')}<span>最近 7 天有 ${o.fwd_fail_7d} 次转发失败，多半是外部邮箱还没在 Cloudflare 验证。</span><a data-goto="logs">看记录</a></div>`);
+    if (!o.can_send) alerts.push(`<div class="alert">${icon('send', 'sm')}<span>还没开通发信，账号只能收信。</span><a data-goto="send">去开通</a></div>`);
+    if (o.fwd_fail_7d) alerts.push(`<div class="alert bad">${icon('forward', 'sm')}<span>最近 7 天有 ${o.fwd_fail_7d} 次转发失败，多半是外部邮箱还没在 Cloudflare 验证。</span><a data-goto="logs">查看记录</a></div>`);
     el.innerHTML = `${alerts.join('')}
-      <div class="tiles">
-        ${tile('账号', o.users, o.disabled ? `${o.disabled} 个已停用` : '全部正常')}
-        ${tile('24 小时收信', o.recv_24h)}
-        ${tile('24 小时发信', o.sent_24h)}
-        ${tile('存储', fmtSize(o.storage), `${o.messages} 封信`)}
-        ${tile('临时地址', o.temps, `别名和群组 ${o.aliases} 个`)}
-        ${tile('7 天退信', o.rejects_7d)}
+      <div class="kpis">
+        ${kpi('24 小时收信', o.recv_24h, `7 天退信 ${o.rejects_7d}`)}
+        ${kpi('24 小时发信', o.sent_24h, o.can_send ? '发信已开通' : '还没开通发信')}
+        ${kpi('账号', o.users, o.disabled ? `${o.disabled} 个已停用` : '全部正常')}
+        ${kpi('存储', fmtSize(o.storage), `${o.messages} 封信 · 临时地址 ${o.temps} 个`)}
       </div>
-      <div class="two">
-        <section class="panel">
-          <h2>最近 14 天收信</h2>
+      <div class="grid2">
+        <section class="ocard">
+          <div class="card-h">每天收信<span>最近 14 天</span></div>
           <div class="bars" role="img" aria-label="最近 14 天每天收信数量">
-            ${days.map((x) => `<div class="bar-col" tabindex="0"><div class="bar" style="height:${(x.recv / max) * 100}%"></div><div class="tip">${label(x.d)}<br>收信 ${x.recv} · 发信 ${x.sent}</div></div>`).join('')}
+            ${days.map((x) => `<div class="bar-col" tabindex="0"><div class="bar" style="height:${(x.recv / max) * 100}%"></div><div class="tip">${label(x.d)} · 收信 ${x.recv} · 发信 ${x.sent}</div></div>`).join('')}
           </div>
           <div class="bar-axis"><span>${label(13)}</span><span>${label(7)}</span><span>今天</span></div>
-          <details class="sm"><summary class="muted">查看数据</summary><table class="tbl mini"><thead><tr><th>日期</th><th class="num">收信</th><th class="num">发信</th></tr></thead><tbody>${days.slice().reverse().map((x) => `<tr><td>${label(x.d)}</td><td class="num">${x.recv}</td><td class="num">${x.sent}</td></tr>`).join('')}</tbody></table></details>
         </section>
-        <section class="panel">
-          <h2>收信最多的地址 <span class="muted sm">最近 30 天</span></h2>
-          ${o.top.length ? `<ol class="rank">${o.top.map((t) => `<li><code>${esc(t.address)}</code><span class="num">${t.n}</span></li>`).join('')}</ol>` : '<p class="muted">还没有信</p>'}
+        <section class="ocard">
+          <div class="card-h">收信最多的地址<span>最近 30 天</span></div>
+          ${o.top.length ? `<div class="rank">${o.top.map((t) => `<div><code>${esc(t.address)}</code><span class="rbar"><i style="width:${(t.n / topMax) * 100}%"></i></span><b>${t.n}</b></div>`).join('')}</div>` : `<div class="empty small"><p>还没有信</p></div>`}
         </section>
       </div>`;
     $$('[data-goto]', el).forEach((a) => (a.onclick = () => openPage('admin/' + a.dataset.goto)));
@@ -916,45 +937,51 @@ const ADMIN = {
   async users(el) {
     const { items, domains } = await api('/admin/users');
     const domain = domains[0] || '';
-    $('#pgActions').innerHTML = `${searchBox('userQ', '搜索账号')}<button id="batchUsers">批量创建</button><button class="primary" id="newUser">${icon('plus')}新建账号</button>`;
+    $('#pgActions').innerHTML = `<button id="batchUsers">批量创建</button><button class="primary" id="newUser">${icon('plus')}新建账号</button>`;
     const n = (f) => items.filter(f).length;
-    el.innerHTML = `${filterBar([['all', '全部', items.length], ['ok', '正常', n((u) => !u.disabled)], ['off', '已停用', n((u) => u.disabled)], ['admin', '管理员', n((u) => u.is_admin)]],
-      [['1:desc', '按最近登录'], ['2:desc', '按用量'], ['3:asc', '按名称']])}
-      <div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>转发</th><th>用量</th><th>最近登录</th><th>操作</th></tr></thead><tbody id="userRows">
+    const table = `<div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>转发</th><th class="num">用量</th><th>最近登录</th><th class="acts"></th></tr></thead><tbody id="userRows">
       ${items.map((u) => `<tr data-q="${esc((u.address + ' ' + u.name + ' ' + (u.aliases || '')).toLowerCase())}" data-st="${u.disabled ? 'off' : 'ok'}${u.is_admin ? ' admin' : ''}" data-s1="${u.last_login || 0}" data-s2="${u.used || 0}" data-s3="${esc(u.name || u.address)}">
-        <td><div class="who-cell">${avatar(u.name, u.address)}<div><div><strong>${esc(u.name || u.address.split('@')[0])}</strong> ${u.is_admin ? badge('accent', '管理员') : ''}</div>
-          <div class="muted sm">${esc(u.address)}${u.aliases ? ` · 别名 ${esc(u.aliases)}` : ''}</div></div></div></td>
-        <td>${u.disabled ? badge('neutral', '已停用') : badge('ok', '正常')}${u.ar_on ? '<div class="muted sm">自动回复中</div>' : ''}</td>
-        <td>${u.fwd_to ? `${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '<div class="muted sm">通过发信服务</div>' : ''}` : '<span class="muted">—</span>'}</td>
-        <td>${fmtSize(u.used)}${u.quota_mb ? ` / ${u.quota_mb} MB` : ''}<div class="muted sm">${u.total} 封${u.send_limit ? ` · 每天最多发 ${u.send_limit} 封` : ''}</div></td>
-        <td>${ago(u.last_login)}</td>
-        <td class="acts">
-          <button class="lnk" data-uedit="${u.id}">编辑</button>
-          <button class="lnk" data-upw="${u.id}">重设密码</button>
-          <button class="lnk" data-uout="${u.id}" title="让它在所有设备退出登录">退出登录</button>
-          ${u.address === state.me.address ? '' : `<button class="lnk danger" data-udel="${u.id}">删除</button>`}
-        </td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个账号')}</div>`;
+        <td><div class="who-cell">${avatar(u.name, u.address)}<div><div><strong>${esc(u.name || u.address.split('@')[0])}</strong>${u.is_admin ? badge('accent', '管理员') : ''}</div>
+          <div class="sub">${esc(u.address)}${u.aliases ? ` · 别名 ${esc(u.aliases)}` : ''}</div></div></div></td>
+        <td>${u.disabled ? badge('neutral', '已停用') : badge('ok', '正常')}${u.ar_on ? '<div class="sub">自动回复中</div>' : ''}</td>
+        <td>${u.fwd_to ? `${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '<div class="sub">通过发信服务</div>' : ''}` : '<span class="muted">—</span>'}</td>
+        <td class="num">${fmtSize(u.used)}${u.quota_mb ? ` / ${u.quota_mb} MB` : ''}<div class="sub">${u.total} 封</div></td>
+        <td class="nowrap">${u.last_login ? fmtDate(u.last_login) : '<span class="muted">从未登录</span>'}</td>
+        ${rowMenu([
+          ['编辑', 'edit', `data-uedit="${u.id}"`],
+          ['重设密码', 'key', `data-upw="${u.id}"`],
+          ['让它在所有设备退出', 'logout', `data-uout="${u.id}"`],
+          u.address === state.me.address ? null : ['删除账号', 'trash', `data-udel="${u.id}"`, true],
+        ])}</tr>`).join('')}</tbody></table></div>`;
+    el.innerHTML = tableBox({
+      chips: [['all', '全部', items.length], ['ok', '正常', n((u) => !u.disabled)], ['off', '已停用', n((u) => u.disabled)], ['admin', '管理员', n((u) => u.is_admin)]],
+      sorts: [['1:desc', '按最近登录'], ['2:desc', '按用量'], ['3:asc', '按名称']],
+      search: ['userQ', '搜索账号'],
+    }, table, items.length, '个账号');
     const reload = () => ADMIN.users(el);
     wireList($('#userRows'), { searchEl: $('#userQ'), sortEl: $('#sortSel', el) });
     const userFields = (u = {}) => `
-      ${u.id ? '' : `<label>地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div></label>`}
+      ${u.id ? '' : `<label>邮箱地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div></label>`}
       <label>显示名称<input name="name" value="${esc(u.name || '')}" maxlength="80"></label>
-      ${u.id ? '' : '<label>密码<input name="password" type="password" minlength="10" required autocomplete="new-password" placeholder="至少 10 位"></label>'}
+      ${u.id ? '' : `<label>初始密码<div class="addr-input"><input name="password" minlength="10" required autocomplete="new-password" value="${genPassword()}"><button type="button" class="icon-btn" data-gen title="重新生成">${icon('dice')}</button></div><span class="muted sm">至少 10 位，对方登录后可以自己修改</span></label>`}
       <div class="form-grid">
-        <label>存储上限（MB，0 为不限）<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
-        <label>每天发信上限（0 为不限）<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>
+        <label>存储上限（MB）<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"><span class="muted sm">0 为不限</span></label>
+        <label>每天发信上限<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"><span class="muted sm">0 为不限</span></label>
       </div>
       <label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
       ${fwdModeField(u.fwd_mode)}
-      <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
-      ${u.id ? `<label class="check"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}> 停用这个账号（不能登录，发来的信会被退回）</label>` : ''}`;
-    $('#newUser').onclick = () => editDialog('新建账号', userFields(), async (f) => {
-      await api('/admin/users', { method: 'POST', json: {
-        address: `${String(f.get('local')).trim().toLowerCase()}@${domain}`, name: f.get('name'), password: f.get('password'),
-        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf',
-      } });
-      toast('已创建'); reload();
-    }, '创建');
+      <label class="switch"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}><span class="track"></span>设为管理员</label>
+      ${u.id ? `<label class="switch"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}><span class="track"></span>停用这个账号（不能登录，发来的信会被退回）</label>` : ''}`;
+    $('#newUser').onclick = () => {
+      editDialog('新建账号', userFields(), async (f) => {
+        await api('/admin/users', { method: 'POST', json: {
+          address: `${String(f.get('local')).trim().toLowerCase()}@${domain}`, name: f.get('name'), password: f.get('password'),
+          is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf',
+        } });
+        copyText(f.get('password')); toast('已创建，初始密码已复制'); reload();
+      }, '创建账号', '创建后把地址和密码发给对方，对方用它登录。');
+      $('#editBody [data-gen]').onclick = () => { $('#editForm').password.value = genPassword(); };
+    };
     $$('[data-uedit]', el).forEach((b) => (b.onclick = () => {
       const u = items.find((x) => String(x.id) === b.dataset.uedit);
       editDialog(`编辑 ${u.address}`, userFields(u), async (f) => {
@@ -968,11 +995,11 @@ const ADMIN = {
     $$('[data-upw]', el).forEach((b) => (b.onclick = () => {
       const u = items.find((x) => String(x.id) === b.dataset.upw);
       editDialog(`重设 ${u.address} 的密码`, `<label>新密码
-        <div class="addr-input"><input name="password" minlength="10" required autocomplete="new-password" value="${genPassword()}"><button type="button" class="icon-btn" data-gen title="换一个">${icon('dice')}</button></div></label>`, async (f) => {
+        <div class="addr-input"><input name="password" minlength="10" required autocomplete="new-password" value="${genPassword()}"><button type="button" class="icon-btn" data-gen title="重新生成">${icon('dice')}</button></div></label>`, async (f) => {
         await api(`/admin/users/${u.id}/password`, { method: 'POST', json: { password: f.get('password') } });
         copyText(f.get('password')); toast('密码已重设，新密码已复制');
-      }, '重设');
-      $('[data-gen]').onclick = () => { $('#editForm').password.value = genPassword(); };
+      }, '重设密码', '重设后它在所有设备上都要重新登录。');
+      $('#editBody [data-gen]').onclick = () => { $('#editForm').password.value = genPassword(); };
     }));
     $$('[data-uout]', el).forEach((b) => (b.onclick = async () => {
       if (!confirm('让这个账号在所有设备上退出登录？')) return;
@@ -980,7 +1007,7 @@ const ADMIN = {
     }));
     $$('[data-udel]', el).forEach((b) => (b.onclick = async () => {
       const u = items.find((x) => String(x.id) === b.dataset.udel);
-      if (!confirm(`删除账号 ${u.address}?它的别名和临时地址也会删除。已收的信会保留，管理员仍能查看。`)) return;
+      if (!confirm(`删除账号 ${u.address}？它的别名和临时地址也会删除。已收的信会保留，管理员仍能查看。`)) return;
       try { await api(`/admin/users/${u.id}`, { method: 'DELETE' }); toast('已删除'); reload(); } catch (x) { toast(x.message); }
     }));
     $('#batchUsers').onclick = () => batchDialog(domain, reload);
@@ -989,22 +1016,26 @@ const ADMIN = {
   async addresses(el) {
     const [{ items }, { items: users }] = await Promise.all([api('/admin/addresses'), api('/admin/users')]);
     const domain = (state.me.domains || [])[0] || '';
-    $('#pgActions').innerHTML = `${searchBox('addrQ', '搜索地址或备注')}<button class="primary" id="newAddr">${icon('plus')}新建</button>`;
+    $('#pgActions').innerHTML = `<button class="primary" id="newAddr">${icon('plus')}新建别名或群组</button>`;
     const n = (f) => items.filter(f).length;
-    el.innerHTML = `${filterBar([['all', '全部', items.length], ['alias', '别名', n((a) => a.kind !== 'group')], ['group', '群组', n((a) => a.kind === 'group')], ['off', '已停用', n((a) => !a.enabled)]],
-      [['1:desc', '按收到数量'], ['2:asc', '按地址']])}
-      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th>操作</th></tr></thead><tbody id="addrRows">
+    const table = items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>状态</th><th>送到</th><th class="num">收到</th><th class="acts"></th></tr></thead><tbody id="addrRows">
       ${items.map((a) => `<tr data-q="${esc((a.address + ' ' + (a.note || '') + ' ' + (a.kind === 'group' ? a.members.join(' ') : a.owner)).toLowerCase())}" data-st="${a.kind === 'group' ? 'group' : 'alias'}${a.enabled ? '' : ' off'}" data-s1="${a.hits}" data-s2="${esc(a.address)}">
-        <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
-        <td>${a.kind === 'group' ? badge('accent', '群组') : badge('neutral', '别名')}</td>
-        <td><div class="chips">${(a.kind === 'group' ? a.members : [a.owner]).map((m) => `<span class="chip">${esc(m)}</span>`).join('')}</div></td>
-        <td class="num">${a.hits}<div class="muted sm">${a.last_at ? fmtDate(a.last_at) : ''}</div></td>
+        <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="copy" data-copy="${esc(a.address)}" title="复制">${icon('copy', 'sm')}</button></div>${a.note ? `<div class="sub">${esc(a.note)}</div>` : ''}</td>
+        <td>${a.kind === 'group' ? '群组' : '别名'}</td>
         <td>${a.enabled ? badge('ok', '使用中') : badge('neutral', '已停用')}</td>
-        <td class="acts">
-          <button class="lnk" data-aedit="${esc(a.address)}">编辑</button>
-          <button class="lnk" data-atoggle="${esc(a.address)}" data-on="${a.enabled}">${a.enabled ? '停用' : '启用'}</button>
-          <button class="lnk danger" data-adel="${esc(a.address)}">删除</button>
-        </td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个')}` : `<div class="empty small">${icon('at')}<p>还没有别名或群组</p></div>`}</div>`;
+        <td>${esc((a.kind === 'group' ? a.members : [a.owner]).join('、'))}</td>
+        <td class="num">${a.hits}</td>
+        ${rowMenu([
+          ['编辑', 'edit', `data-aedit="${esc(a.address)}"`],
+          ['复制地址', 'copy', `data-copy="${esc(a.address)}"`],
+          [a.enabled ? '停用' : '启用', 'power', `data-atoggle="${esc(a.address)}" data-on="${a.enabled}"`],
+          ['删除', 'trash', `data-adel="${esc(a.address)}"`, true],
+        ])}</tr>`).join('')}</tbody></table></div>` : `<div class="empty small">${icon('at')}<p>还没有别名或群组</p></div>`;
+    el.innerHTML = tableBox({
+      chips: [['all', '全部', items.length], ['alias', '别名', n((a) => a.kind !== 'group')], ['group', '群组', n((a) => a.kind === 'group')], ['off', '已停用', n((a) => !a.enabled)]],
+      sorts: [['1:desc', '按收到数量'], ['2:asc', '按地址']],
+      search: ['addrQ', '搜索地址或备注'],
+    }, table, items.length, '个');
     wireList($('#addrRows'), { searchEl: $('#addrQ'), sortEl: $('#sortSel', el) });
     const reload = () => ADMIN.addresses(el);
     const userOpts = (sel) => users.map((u) => `<option value="${esc(u.address)}" ${u.address === sel ? 'selected' : ''}>${esc(u.address)}${u.name ? ' · ' + esc(u.name) : ''}</option>`).join('');
@@ -1019,7 +1050,7 @@ const ADMIN = {
         const kind = f.get('kind');
         await api('/admin/addresses', { method: 'POST', json: { kind, local: f.get('local'), owner: f.get('owner'), members: f.get('members'), note: f.get('note') } });
         toast('已创建'); state.me = await api('/me'); reload();
-      }, '创建');
+      }, '创建', '别名：发到它的信进某个账号。群组：发到它的信分给每个成员。');
       $$('#editBody [name=kind]').forEach((r) => (r.onchange = () => $$('#editBody [data-k]').forEach((x) => x.classList.toggle('hidden', x.dataset.k !== r.value))));
     };
     $$('[data-aedit]', el).forEach((b) => (b.onclick = () => {
@@ -1038,41 +1069,32 @@ const ADMIN = {
       try { await api(`/admin/addresses/${encodeURIComponent(b.dataset.atoggle)}`, { method: 'PATCH', json: { enabled: b.dataset.on !== '1' } }); reload(); } catch (x) { toast(x.message); }
     }));
     $$('[data-adel]', el).forEach((b) => (b.onclick = async () => {
-      if (!confirm(`删除 ${b.dataset.adel}?`)) return;
+      if (!confirm(`删除 ${b.dataset.adel}？`)) return;
       try { await api(`/admin/addresses/${encodeURIComponent(b.dataset.adel)}`, { method: 'DELETE' }); reload(); } catch (x) { toast(x.message); }
     }));
   },
 
   async temps(el) {
     const [route, { items }] = await Promise.all([api('/admin/routing'), api('/temp?all=1')]);
-    $('#pgActions').innerHTML = searchBox('tempQ', '搜索地址、备注或账号');
-    el.innerHTML = `${tempTargetPanel(route)}${tempBar(items)}${tempRows(items, true, () => ADMIN.temps(el))}`;
+    el.innerHTML = `${tempTargetPanel(route)}${tempTable(items, true, () => ADMIN.temps(el))}`;
     wireTempTarget($('[data-target]', el), route, () => ADMIN.temps(el));
     wireList($('.temp-rows', el), { searchEl: $('#tempQ'), sortEl: $('#sortSel', el) });
   },
 
   async brand(el) {
     const b = await api('/brand');
-    el.innerHTML = `<div class="narrow-col">
-      <form class="panel" id="brandName">
-        <h2>系统名称</h2>
-        <label>名称
-          <input name="name" value="${esc(b.name)}" maxlength="40" placeholder="OneMail"></label>
-        <div class="actions"><button class="primary" type="submit">保存</button></div>
-      </form>
-      <section class="panel">
-        <h2>Logo</h2>
+    el.innerHTML = `<div class="secs">
+      <form id="brandName">${sec('系统名称', '显示在侧栏、登录页和浏览器标签上。', `
+        <label>名称<input name="name" value="${esc(b.name)}" maxlength="40" placeholder="OneMail"></label>
+        <div class="actions"><button class="primary" type="submit">保存</button></div>`)}</form>
+      ${sec('Logo', '正方形 PNG 或 SVG，不超过 512 KB。', `
         <div class="logo-edit">
           <span class="logo logo-lg ${b.logo ? 'has-img' : ''}">${b.logo ? `<img src="${esc(b.logo)}" alt="">` : DEFAULT_LOGO}</span>
-          <div class="stack">
-            <p class="hint">正方形 PNG / SVG，不超过 512KB</p>
-            <div class="tools">
-              <label class="file-btn bordered">${icon('upload')}上传图片<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
-              ${b.logo ? '<button type="button" id="logoDel">恢复默认</button>' : ''}
-            </div>
+          <div class="actions">
+            <label class="file-btn">${icon('upload', 'sm')}上传图片<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
+            ${b.logo ? '<button type="button" id="logoDel">恢复默认</button>' : ''}
           </div>
-        </div>
-      </section>
+        </div>`)}
     </div>`;
     const refresh = async () => { applyBrand(await api('/brand')); await ADMIN.brand(el); };
     $('#brandName').onsubmit = async (e) => {
@@ -1101,8 +1123,7 @@ const ADMIN = {
       settings: [badge('ok', '已开通'), `Resend Key 结尾 …${esc(r.tail)}`],
       cloudflare: [badge('warn', 'Cloudflare 发信'), '需要 Workers 付费版。填了 Resend Key 会改用 Resend'],
     }[r.source] || [badge('neutral', '未开通'), '填一个 Resend API Key 就能发信'];
-    el.innerHTML = `<div class="narrow-col"><section class="panel">
-      <h2>发信（Resend）</h2>
+    el.innerHTML = `<div class="secs">${sec('发信服务', '用 Resend 发信，免费额度每天 100 封，所有账号共用。', `
       <p class="status-line">${status[0]}<span class="muted">${status[1]}</span></p>
       <form id="resendForm2" class="inline-form ${r.source === 'secret' ? 'hidden' : ''}">
         <input name="key" type="password" placeholder="re_ 开头的 API Key" autocomplete="off">
@@ -1112,8 +1133,7 @@ const ADMIN = {
       <ol class="steps">
         <li>在 <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> 添加并验证域名 <code>${esc((state.me.domains || [])[0] || '')}</code></li>
         <li>创建 API Key，粘贴到上面</li>
-      </ol>
-    </section></div>`;
+      </ol>`)}</div>`;
     const save = async (key) => {
       try { const x = await api('/admin/send', { method: 'POST', json: { key } }); toast(x.note); state.me = await api('/me'); ADMIN.send(el); } catch (x) { toast(x.message); }
     };
@@ -1123,19 +1143,17 @@ const ADMIN = {
 
   async notify(el) {
     const r = await api('/admin/telegram');
-    el.innerHTML = `<section class="panel">
-      <h2>Telegram 机器人 <span class="count">管理员</span></h2>
-      <p class="status-line">${r.bot ? `${badge('ok', '已连接')}<span class="muted">@${esc(r.bot)}，${r.bound} 人已绑定</span>` : `${badge('neutral', '未设置')}<span class="muted">设置后，每个人可以在这里绑定自己的 Telegram</span>`}</p>
+    el.innerHTML = sec('Telegram 机器人', '只有管理员能设置。设置后每个人可以在下面绑定自己的 Telegram。', `
+      <p class="status-line">${r.bot ? `${badge('ok', '已连接')}<span class="muted">@${esc(r.bot)}，${r.bound} 人已绑定</span>` : badge('neutral', '未设置')}</p>
       <form id="tgForm" class="inline-form">
-        <input name="token" type="password" placeholder="${r.bot ? '换一个机器人 Token' : '机器人 Token，如 123456789:AAH…'}" autocomplete="off">
+        <input name="token" type="password" placeholder="${r.bot ? '换一个机器人 Token' : '机器人 Token，例如 123456789:AAH…'}" autocomplete="off">
         <button class="primary" type="submit">保存</button>
         ${r.bot ? '<button type="button" id="tgClear">断开</button>' : ''}
       </form>
       <ol class="steps">
-        <li>在 Telegram 打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>,发送 <code>/newbot</code>,按提示给机器人起名</li>
+        <li>在 Telegram 打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>，发送 <code>/newbot</code>，按提示给机器人起名</li>
         <li>复制它回复的 Token，粘贴到上面保存</li>
-      </ol>
-    </section>`;
+      </ol>`);
     const save = async (token) => {
       try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); pageSettings('notify'); } catch (x) { toast(x.message); }
     };
@@ -1145,16 +1163,17 @@ const ADMIN = {
 
   async logs(el, type = 'mail', q = '') {
     const { items } = await api(`/admin/logs?type=${type}&q=${encodeURIComponent(q)}`);
-    const cols = type === 'login' ? ['时间', '结果', '账号', 'IP', '详情'] : ['时间', '结果', type === 'send' ? '发件人' : '发件人', type === 'send' ? '收件人' : '收件地址', '详情'];
-    if (!$('#logQ')) $('#pgActions').innerHTML = searchBox('logQ', '按地址搜索');
-    el.innerHTML = `<div class="blk fbar">${[['mail', '收信'], ['send', '发信'], ['login', '登录']].map(([k, t]) => `<button type="button" class="ltype fchip ${k === type ? 'on' : ''}" data-lt="${k}">${t}</button>`).join('')}</div>
-      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>
+    const cols = type === 'login' ? ['时间', '结果', '账号', 'IP', '详情'] : ['时间', '结果', '发件人', type === 'send' ? '收件人' : '收件地址', '详情'];
+    const table = items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>
       ${items.map((x) => { const k = LOG_KINDS[x.kind] || ['neutral', x.kind]; return `<tr>
         <td class="nowrap">${fmtDate(x.at, true)}</td><td>${badge(k[0], k[1])}</td><td>${esc(x.actor)}</td>
         <td>${esc(type === 'login' ? x.ip : x.target)}</td><td class="detail">${esc(x.detail)}</td></tr>`; }).join('')}
-      </tbody></table></div>${tblFoot(items.length, '条')}` : `<div class="empty small">${icon('history')}<p>没有记录</p></div>`}</div>`;
-    $$('[data-lt]', el).forEach((b) => (b.onclick = () => ADMIN.logs(el, b.dataset.lt, $('#logQ').value.trim())));
-    let t; $('#logQ').oninput = (e) => { clearTimeout(t); t = setTimeout(() => ADMIN.logs(el, type, e.target.value.trim()), 400); };
+      </tbody></table></div>` : `<div class="empty small">${icon('history')}<p>没有记录</p></div>`;
+    el.innerHTML = tableBox({ chips: [['mail', '收信'], ['send', '发信'], ['login', '登录']], search: ['logQ', '按地址搜索'] }, table, items.length, '条');
+    $$('.seg a', el).forEach((a) => { a.classList.toggle('on', a.dataset.f === type); a.onclick = () => ADMIN.logs(el, a.dataset.f, $('#logQ').value.trim()); });
+    const qi = $('#logQ'); qi.value = q;
+    if (q) { qi.focus(); qi.setSelectionRange(q.length, q.length); }
+    let t; qi.oninput = (e) => { clearTimeout(t); t = setTimeout(() => ADMIN.logs(el, type, e.target.value.trim()), 400); };
   },
 };
 
@@ -1166,7 +1185,7 @@ function genPassword() {
 function batchDialog(domain, reload) {
   let results = [];
   editDialog('批量创建账号', `
-    <label>每行一个：用户名，密码，显示名称（密码可留空）
+    <label>用户名，密码，显示名称
     <textarea name="lines" rows="7" placeholder="alice&#10;bob,MyPassword123,Bob Li&#10;carol,,Carol"></textarea></label>
     <p class="muted sm" id="batchMsg"></p>
     <div class="table-wrap hidden" id="batchWrap"><table class="tbl mini"><thead><tr><th>地址</th><th>密码</th><th>结果</th></tr></thead><tbody id="batchRows"></tbody></table></div>
@@ -1191,10 +1210,10 @@ function batchDialog(domain, reload) {
     form.lines.value = '';
     reload();
     throw new Error(''); // 保持弹窗打开，方便下载结果
-  }, '开始创建');
+  }, '开始创建', '每行一个账号。密码留空会自动生成，创建完可以下载结果。');
   $('#batchCsv').onclick = () => {
     const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
-    const csv = '﻿地址，密码，显示名称，结果\n' + results.map((r) => [r.address, r.result === '成功' ? r.password : '', r.name, r.result].map(q).join(',')).join('\n');
+    const csv = '﻿地址,密码,显示名称,结果\n' + results.map((r) => [r.address, r.result === '成功' ? r.password : '', r.name, r.result].map(q).join(',')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     a.download = `mail-accounts-${new Date().toISOString().slice(0, 10)}.csv`;

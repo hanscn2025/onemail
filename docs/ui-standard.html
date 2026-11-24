@@ -5,329 +5,164 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OneMail UI 标准</title>
 <style>
-  :root {
-    --page: #f4f5f7; --surface: #fff; --line: #d1d1d1; --line-soft: #e0e0e0; --line-strong: #616161;
-    --text: #242424; --text-2: #424242; --muted: #616161; --accent: #0f6cbd; --accent-soft: #ebf3fc;
-    --chip: #f2f3f5; --th: #fafafa; --danger: #c50f1f;
-  }
+  :root { --bg: #fff; --side: #f7f7f8; --hover: #f1f1f3; --subtle: #fafafa; --line: #e7e7ea; --line-2: #d4d4d8; --text: #18181b; --text-2: #3f3f46; --muted: #71717a; --faint: #a1a1aa; --brand: #0f6cbd; --brand-soft: #eef5fc; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--page); color: var(--text); font: 14px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; display: grid; gap: 16px; }
+  body { margin: 0; background: var(--side); color: var(--text); font: 14px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 24px 80px; display: grid; gap: 16px; }
   header h1 { margin: 0; font-size: 28px; line-height: 36px; }
   header p { margin: 8px 0 0; color: var(--muted); }
-  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
-  nav.toc a { height: 28px; padding: 0 10px; border-radius: 4px; background: #fff; color: var(--text-2); display: inline-flex; align-items: center; font-size: 13px; text-decoration: none; }
-  .blk { background: var(--surface); border-radius: 4px; padding: 24px; display: grid; gap: 16px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toc a { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text-2); display: inline-flex; align-items: center; font-size: 13px; text-decoration: none; }
+  .blk { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 24px; display: grid; gap: 14px; }
   .blk h2 { margin: 0; font-size: 20px; line-height: 28px; }
-  .blk h3 { margin: 8px 0 0; font-size: 16px; line-height: 22px; }
+  .blk h3 { margin: 8px 0 0; font-size: 15px; }
   .note { margin: 0; color: var(--muted); }
-  table.spec { width: 100%; border-collapse: collapse; }
-  table.spec th { text-align: left; background: var(--th); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
-  table.spec td { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
-  table.spec td:first-child { white-space: nowrap; font-weight: 600; }
-  code { font: 13px ui-monospace, Menlo, monospace; background: var(--chip); padding: 1px 6px; border-radius: 4px; }
-  .rule { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; color: var(--text-2); }
-  .sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-  .sw div { display: flex; gap: 12px; align-items: center; }
-  .sw i { width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line-soft); flex: none; }
-  .demo { background: var(--page); border: 1px dashed #b9c0cc; border-radius: 4px; padding: 24px 60px; display: grid; gap: 16px; position: relative; }
-  .demo .row { display: flex; align-items: center; gap: 8px; height: 36px; }
-  .demo .row b { font-size: 20px; flex: 1; }
-  .demo .d { background: #fff; border-radius: 4px; display: flex; align-items: center; padding: 0 24px; color: var(--muted); font-size: 13px; }
-  .ann { position: absolute; font-size: 12px; color: #d13438; }
-  .btn { height: 32px; min-width: 80px; padding: 0 14px; border-radius: 4px; border: 1px solid var(--line); background: #fff; font: inherit; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--text); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-  svg.i.l { width: 20px; height: 20px; }
-  .lnk { color: var(--accent); margin-right: 16px; }
-  .lnk.red { color: var(--danger); }
-  .input { height: 32px; border: 1px solid var(--line); border-bottom-color: var(--line-strong); border-radius: 4px; padding: 0 10px; display: flex; align-items: center; gap: 6px; color: var(--muted); max-width: 360px; }
-  .chip { height: 28px; padding: 0 10px; border-radius: 4px; background: var(--chip); display: inline-flex; align-items: center; font-size: 13px; color: var(--text-2); }
-  .chip.on { background: var(--accent-soft); color: var(--accent); }
-  .tag { height: 24px; padding: 0 8px; border-radius: 4px; background: var(--chip); display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); }
-  .tabsx { display: flex; padding: 0 12px; border: 1px solid var(--line-soft); border-radius: 4px; }
-  .tab { height: 44px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); position: relative; }
-  .tab.on { color: var(--accent); font-weight: 600; }
-  .tab.on::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 0; height: 2px; background: var(--accent); }
-  .dot { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
-  .dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #13a10e; }
-  .dot.warn::before { background: #e8a200; } .dot.bad::before { background: #d13438; } .dot.off::before { background: #a0a0a0; }
-  .flex { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .navx { width: 216px; display: grid; gap: 2px; }
-  .navx span { height: 36px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 4px; color: var(--text-2); position: relative; }
-  .navx span.on { background: #ebebeb; color: var(--text); font-weight: 600; }
-  .navx span.on::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--accent); }
-  .tb { width: 100%; border-collapse: collapse; border: 1px solid var(--line-soft); }
-  .tb th { background: var(--th); height: 44px; text-align: left; padding: 0 16px; font-weight: 600; border-bottom: 1px solid var(--line-soft); }
-  .tb td { padding: 14px 16px; border-bottom: 1px solid var(--line-soft); }
-  .tb th:first-child, .tb td:first-child { padding-left: 24px; } .tb th:last-child, .tb td:last-child { padding-right: 24px; }
-  .tb .s { color: var(--muted); font-size: 13px; line-height: 18px; }
-  .foot { display: flex; justify-content: flex-end; padding: 12px 24px; border: 1px solid var(--line-soft); border-top: none; color: var(--muted); font-size: 13px; }
-  .form { border: 1px solid var(--line-soft); border-radius: 4px; }
-  .form .in { padding: 24px; display: grid; gap: 16px; }
-  .form .ft { border-top: 1px solid var(--line-soft); padding: 16px 24px; display: flex; gap: 8px; }
-  .field { display: grid; gap: 4px; }
-  .radio { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }
-  .radio i { width: 16px; height: 16px; border: 1px solid var(--line-strong); border-radius: 50%; margin-top: 2px; flex: none; }
-  .radio i.on { border: 5px solid var(--accent); }
-  .radio small { display: block; color: var(--muted); font-size: 12px; line-height: 16px; }
-  .meas { display: inline-flex; align-items: center; gap: 8px; outline: 1px dashed #d13438; padding: 0 4px; }
-  @media (max-width: 760px) { .demo { padding: 12px; } }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--subtle); padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  code { font: 12px ui-monospace, Menlo, monospace; background: var(--hover); padding: 1px 5px; border-radius: 4px; }
+  .rule { border-left: 3px solid var(--brand); padding: 4px 0 4px 12px; color: var(--text-2); }
+  .sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .sw div { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+  .sw i { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); flex: none; }
+  .tbox { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>OneMail UI 标准</h1>
-    <p>全站唯一的设计规范。所有数值都对应 <code>public/style.css</code> 开头的变量;新增或修改样式先改这里,再改变量,不在单个页面里写零散数值。</p>
+    <p>全站唯一的设计规范。数值对应 <code>public/style.css</code> 开头的变量;改样式先改这里,再改变量,不在单个页面里写零散数值。参考的产品:Linear、Stripe、Microsoft 365 管理中心。</p>
   </header>
-  <nav class="toc"><a href="#c">颜色</a><a href="#t">文字</a><a href="#s">间距</a><a href="#r">圆角与尺寸</a><a href="#i">图标</a><a href="#l">布局</a><a href="#k">组件</a><a href="#w">屏幕宽度</a><a href="#x">文案</a></nav>
+  <nav class="toc"><a href="#p">设计原则</a><a href="#c">颜色</a><a href="#t">文字</a><a href="#s">间距</a><a href="#r">圆角与尺寸</a><a href="#i">图标</a><a href="#l">布局</a><a href="#k">组件</a><a href="#x">交互</a><a href="#w">屏幕宽度</a><a href="#y">文案</a></nav>
 
-  <!-- 1 颜色 -->
-  <section class="blk" id="c">
-    <h2>1. 颜色</h2>
-    <h3>中性色</h3>
-    <table class="spec">
+  <section class="blk" id="p"><h2>1. 设计原则</h2>
+    <table>
+      <tr><td>简洁</td><td>整体白底,层次靠留白和 1px 细线区分,不用灰底叠白块,不加装饰阴影</td></tr>
+      <tr><td>蓝色克制</td><td>品牌蓝只给主按钮、链接、选中状态和未读圆点;一屏最多一个主按钮</td></tr>
+      <tr><td>操作就近</td><td>常用操作放在它作用的位置:表格工具栏在表格框里,行操作收进行尾「⋯」,列表快捷操作在悬停时出现</td></tr>
+      <tr><td>少打扰</td><td>设置改了才出现保存条;能一步完成的不开弹窗(临时邮箱一行创建)</td></tr>
+    </table>
+  </section>
+
+  <section class="blk" id="c"><h2>2. 颜色</h2>
+    <table>
       <tr><th>变量</th><th>浅色</th><th>深色</th><th>用在哪</th></tr>
-      <tr><td><code>--page</code></td><td>#f4f5f7</td><td>#141518</td><td>页面内容区底色、登录页底色</td></tr>
-      <tr><td><code>--surface</code></td><td>#ffffff</td><td>#1e1f22</td><td>白块、顶栏、侧栏、信件列表、读信区</td></tr>
-      <tr><td><code>--raised</code></td><td>#ffffff</td><td>#2a2b2f</td><td>弹窗、下拉菜单</td></tr>
-      <tr><td><code>--hover</code></td><td>#f5f5f5</td><td>#26272b</td><td>鼠标悬停底色</td></tr>
-      <tr><td><code>--selected</code></td><td>#ebebeb</td><td>#2f3034</td><td>侧栏选中项、选中的信</td></tr>
-      <tr><td><code>--th</code></td><td>#fafafa</td><td>#26272b</td><td>表头底色、表格行悬停</td></tr>
-      <tr><td><code>--chip</code></td><td>#f2f3f5</td><td>#2a2c30</td><td>筛选按钮、小标签、计数底色</td></tr>
-      <tr><td><code>--line</code></td><td>#d1d1d1</td><td>#4d4f54</td><td>输入框、次按钮的边框</td></tr>
-      <tr><td><code>--line-soft</code></td><td>#e0e0e0</td><td>#303237</td><td>所有分隔线(顶栏、侧栏、表格行、按钮区)</td></tr>
-      <tr><td><code>--line-strong</code></td><td>#616161</td><td>#adadad</td><td>输入框底边、开关关闭态</td></tr>
-    </table>
-    <h3>文字色</h3>
-    <div class="sw">
-      <div><i style="background:#242424"></i><span><b>--text #242424</b><br><span class="note">标题、正文、选中项</span></span></div>
-      <div><i style="background:#424242"></i><span><b>--text-2 #424242</b><br><span class="note">菜单、标签、次要正文</span></span></div>
-      <div><i style="background:#616161"></i><span><b>--muted #616161</b><br><span class="note">说明、时间、第二行信息、占位文字</span></span></div>
-    </div>
-    <h3>品牌色与状态色</h3>
-    <div class="sw">
-      <div><i style="background:#0f6cbd"></i><span><b>--accent #0f6cbd</b><br><span class="note">主按钮、选中标签、链接、未读圆点</span></span></div>
-      <div><i style="background:#115ea3"></i><span><b>--accent-hover #115ea3</b><br><span class="note">主按钮悬停</span></span></div>
-      <div><i style="background:#ebf3fc"></i><span><b>--accent-soft #ebf3fc</b><br><span class="note">选中的筛选按钮、「管理员」标签底</span></span></div>
-      <div><i style="background:#c50f1f"></i><span><b>--danger #c50f1f</b><br><span class="note">只用于「删除」文字和错误提示</span></span></div>
-      <div><i style="background:#13a10e;border-radius:50%"></i><span><b>正常 #13a10e</b></span></div>
-      <div><i style="background:#e8a200;border-radius:50%"></i><span><b>提醒 #e8a200</b></span></div>
-      <div><i style="background:#d13438;border-radius:50%"></i><span><b>失败 #d13438</b></span></div>
-      <div><i style="background:#a0a0a0;border-radius:50%"></i><span><b>停用 #a0a0a0</b></span></div>
-    </div>
-    <div class="rule">蓝色只给能点的东西和选中状态;状态色只用在 6px 圆点上,不做彩色底块;一屏里主按钮最多一个。</div>
-  </section>
-
-  <!-- 2 文字 -->
-  <section class="blk" id="t">
-    <h2>2. 文字</h2>
-    <table class="spec">
-      <tr><th>级别</th><th>字号</th><th>行高(行距)</th><th>字重</th><th>颜色</th><th>用在哪</th></tr>
-      <tr><td>页面标题</td><td>20</td><td>28</td><td>600</td><td>--text</td><td>「设置」「管理中心」、弹窗标题、读信主题</td></tr>
-      <tr><td>块标题</td><td>16</td><td>22</td><td>600</td><td>--text</td><td>白块标题「个人资料」、信件列表标题、品牌名</td></tr>
-      <tr><td>正文</td><td>14</td><td>20</td><td>400</td><td>--text / --text-2</td><td>正文、字段名、表格、菜单、标签、按钮(按钮 600)</td></tr>
-      <tr><td>辅助</td><td>13</td><td>18</td><td>400</td><td>--muted</td><td>表格第二行、筛选按钮、状态、总数、页面说明</td></tr>
-      <tr><td>说明</td><td>12</td><td>16</td><td>400</td><td>--muted</td><td>选项说明小字、时间、计数、小标签</td></tr>
-      <tr><td>数字</td><td>24</td><td>32</td><td>600</td><td>--text</td><td>概览统计数字(等宽数字)</td></tr>
-    </table>
-    <table class="spec">
-      <tr><th>项目</th><th>标准</th></tr>
-      <tr><td>字体</td><td>系统字体:-apple-system、Segoe UI、Roboto、PingFang SC、Microsoft YaHei;地址、代码用等宽字体</td></tr>
-      <tr><td>字距</td><td>0,不加字间距;数字用等宽数字(时间、数量、统计)</td></tr>
-      <tr><td>字重</td><td>只用 400(常规)和 600(强调:标题、按钮、表头、选中项、未读)</td></tr>
-      <tr><td>行距</td><td>按上表固定行高;读信正文 1.7 倍便于长文阅读</td></tr>
-      <tr><td>段落间距</td><td>说明文字与上方元素 4;两段说明之间 8;块内各组之间 16</td></tr>
-      <tr><td>文字截断</td><td>单行放不下用省略号(列表发件人、主题、地址);正文换行不截断</td></tr>
+      <tr><td><code>--bg</code></td><td>#ffffff</td><td>#18181b</td><td>内容区、表格、弹窗</td></tr>
+      <tr><td><code>--side</code></td><td>#f7f7f8</td><td>#141416</td><td>侧栏、快速创建条、登录页底</td></tr>
+      <tr><td><code>--hover</code> / <code>--active</code></td><td>#f1f1f3 / #e9e9ec</td><td>#232327 / #2a2a2f</td><td>悬停 / 侧栏选中、分段选中</td></tr>
+      <tr><td><code>--subtle</code></td><td>#fafafa</td><td>#1d1d20</td><td>表头、表格行悬停、弹窗底栏</td></tr>
+      <tr><td><code>--line</code> / <code>--line-2</code></td><td>#e7e7ea / #d4d4d8</td><td>#2c2c31 / #3f3f46</td><td>分隔线、卡片和表格边框 / 输入框和次按钮边框</td></tr>
+      <tr><td>文字</td><td>#18181b / #3f3f46 / #71717a / #a1a1aa</td><td>#f4f4f5 / #d4d4d8 / #a1a1aa / #71717a</td><td>主文字 / 次要 / 说明、时间 / 占位、计数</td></tr>
+      <tr><td><code>--brand</code></td><td>#0f6cbd(悬停 #0c5aa0)</td><td>#3b8fe0</td><td>主按钮、链接、选中、未读圆点、聚焦光圈(14% 透明)</td></tr>
+      <tr><td><code>--brand-soft</code></td><td>#eef5fc</td><td>#16273a</td><td>选中的信、选中的选项卡片、管理员标签</td></tr>
+      <tr><td>状态</td><td>正常 #16a34a · 提醒 #d97706 · 失败 #dc2626 · 停用 #a1a1aa</td><td>#4ade80 · #fbbf24 · #f87171 · #71717a</td><td>只用在 6px 圆点上;删除文字用失败红</td></tr>
     </table>
   </section>
 
-  <!-- 3 间距 -->
-  <section class="blk" id="s">
-    <h2>3. 间距</h2>
-    <p class="note">只用 4 的倍数:<b>4 / 8 / 12 / 16 / 24</b>,页面边距 <b>12 / 40 / 60</b>。不出现 5、10、18、20、28 之类的零散值。</p>
-    <table class="spec">
+  <section class="blk" id="t"><h2>3. 文字</h2>
+    <table>
+      <tr><th>级别</th><th>字号 / 行高</th><th>字重</th><th>用在哪</th></tr>
+      <tr><td>页面标题</td><td>22 / 30(手机 20)</td><td>600</td><td>「设置」「概览」、读信主题</td></tr>
+      <tr><td>列表标题</td><td>18 / 26</td><td>600</td><td>收件箱等文件夹名</td></tr>
+      <tr><td>弹窗标题</td><td>17 / 24</td><td>600</td><td>弹窗</td></tr>
+      <tr><td>分区标题</td><td>15 / 22</td><td>600</td><td>设置分区、卡片标题、品牌名</td></tr>
+      <tr><td>正文</td><td>14 / 20</td><td>400(按钮 500)</td><td>正文、菜单、表格、按钮、输入框</td></tr>
+      <tr><td>辅助</td><td>13 / 18</td><td>400(字段名 500)</td><td>说明、字段名、表格第二行、筛选、工具栏控件</td></tr>
+      <tr><td>小字</td><td>12 / 16</td><td>400–500</td><td>表头、时间、计数、侧栏分组名</td></tr>
+      <tr><td>数字</td><td>26 / 34</td><td>600</td><td>概览指标,等宽数字</td></tr>
+    </table>
+    <p class="note">字体用系统字体(苹方、雅黑、Segoe UI);地址和代码用等宽字体。中文字距 0,大标题 -0.01em。读信正文行高 1.75。</p>
+  </section>
+
+  <section class="blk" id="s"><h2>4. 间距</h2>
+    <table>
       <tr><th>距离</th><th>用在哪</th></tr>
-      <tr><td>4</td><td>字段名 → 输入框;选项名 → 说明小字;小标签里图标 → 文字;表格两行文字之间 2</td></tr>
-      <tr><td>8</td><td>按钮里图标 → 文字;标签里图标 → 文字;按钮与按钮;筛选按钮之间;单选/勾选 → 文字;弹窗标题 → 内容</td></tr>
-      <tr><td>12</td><td>侧栏图标 → 文字;侧栏内边距;筛选块上下;标题与页面说明;头像 → 名字</td></tr>
-      <tr><td>16</td><td>白块之间;块标题 → 内容;字段之间;表格操作文字之间;侧栏分组之间;按钮区上下</td></tr>
-      <tr><td>24</td><td>白块内边距(手机 16);表格首尾列;页面顶部;弹窗内边距;弹窗按钮上方</td></tr>
-      <tr><td>40 / 60</td><td>内容区左右:平板 40,电脑 60(手机 12)</td></tr>
+      <tr><td>2–6</td><td>侧栏菜单项之间 1–2;字段名 → 输入框 6;选项名 → 说明 2</td></tr>
+      <tr><td>8–12</td><td>按钮之间 8;图标 → 文字(按钮 6、侧栏 10、菜单 8);工具栏内边距 10–12;卡片选项之间 8</td></tr>
+      <tr><td>16–20</td><td>表单字段之间 18;页头 → 标签 20;卡片之间 16;列表项上下 12、左右 16</td></tr>
+      <tr><td>24–28</td><td>标签 → 内容 24;设置分区上下 28;读信内容 28</td></tr>
+      <tr><td>40–48</td><td>页面左右 40(平板 28、手机 16);设置左栏和右栏之间 48</td></tr>
     </table>
-    <div class="rule"><b>对齐</b>:① 页面标题、右侧按钮和白块外边对齐;② 每个白块里的内容(标签文字、筛选按钮、表头、表单标题)离块边 24;③ 同一行的图标和文字垂直居中;④ 侧栏所有图标在同一条竖线上。</div>
+    <div class="rule">对齐:页面标题、标签、表格框、设置分区左边对齐;表格框里的工具栏、表头、内容左边对齐;侧栏所有图标在同一条竖线上。</div>
   </section>
 
-  <!-- 4 圆角与尺寸 -->
-  <section class="blk" id="r">
-    <h2>4. 圆角、尺寸、阴影</h2>
-    <table class="spec">
-      <tr><th>项目</th><th>标准</th></tr>
-      <tr><td>圆角 4</td><td>按钮、输入框、下拉框、白块、筛选按钮、小标签、侧栏菜单项</td></tr>
-      <tr><td>圆角 8</td><td>弹窗、下拉菜单、提示条、登录卡片</td></tr>
-      <tr><td>圆形</td><td>头像、Logo、状态圆点、开关</td></tr>
-      <tr><td>高 32</td><td>按钮、输入框、下拉框、页面内搜索框</td></tr>
-      <tr><td>高 36</td><td>标题行、侧栏菜单、写信按钮、顶部全局搜索、图标按钮(36×36)</td></tr>
-      <tr><td>高 44</td><td>标签、表头、写信弹窗里的字段行</td></tr>
-      <tr><td>高 48</td><td>信件列表标题栏、读信工具栏、写信弹窗标题栏</td></tr>
-      <tr><td>高 56</td><td>顶栏</td></tr>
-      <tr><td>宽</td><td>侧栏 240(收起 68);页面搜索框 260;排序框 160;表单内容最宽 880;弹窗 540;写信 760</td></tr>
-      <tr><td>阴影</td><td>只给浮在上面的东西:下拉菜单、弹窗、提示条。白块、按钮、卡片不加阴影</td></tr>
+  <section class="blk" id="r"><h2>5. 圆角、尺寸、阴影</h2>
+    <table>
+      <tr><td>圆角</td><td>按钮、输入框、菜单项 6;卡片、表格框、下拉菜单 8;弹窗、登录卡片 12;Logo 7;头像圆形</td></tr>
+      <tr><td>高度</td><td>按钮、输入框 34;表格工具栏控件 30;侧栏菜单 32;写信按钮 36;表头 36;读信工具栏 52</td></tr>
+      <tr><td>宽度</td><td>侧栏 240;信件列表 320–380;读信内容最宽 880;设置左栏 260、右栏最宽 560;弹窗 500,写信 760;表格搜索框 220</td></tr>
+      <tr><td>阴影</td><td>只给浮层:下拉菜单和保存条用轻阴影,弹窗用重阴影;页面里的卡片和按钮不加阴影</td></tr>
     </table>
   </section>
 
-  <!-- 5 图标 -->
-  <section class="blk" id="i">
-    <h2>5. 图标</h2>
-    <div class="flex">
-      <span class="meas"><svg class="i l" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>侧栏 20,离文字 12</span>
-      <span class="meas"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>按钮 16,离文字 8</span>
-      <span class="meas"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>搜索 16,离框左 10</span>
-    </div>
-    <table class="spec">
-      <tr><th>项目</th><th>标准</th></tr>
-      <tr><td>风格</td><td>线条图标,24 网格,线宽 1.7,圆头圆角;同一处不混用填充图标(星标选中除外)</td></tr>
-      <tr><td>尺寸</td><td>20:侧栏、顶栏、图标按钮、读信工具栏;16:按钮、标签、搜索框、小标签、提示条、附件;48:空状态</td></tr>
-      <tr><td>离文字</td><td>侧栏 12;按钮、标签、提示条 8;小标签 4;搜索框图标离左边 10,文字从 32 开始(全局搜索 12 / 36)</td></tr>
-      <tr><td>颜色</td><td>跟文字同色;独立图标按钮平时 --muted,悬停 --text;选中标签图标随文字变蓝</td></tr>
-      <tr><td>对齐</td><td>与同一行文字垂直居中,误差不超过 1px</td></tr>
-      <tr><td>含义</td><td>图标必须和内容相关;只有图标的按钮必须有文字提示(悬停显示)</td></tr>
+  <section class="blk" id="i"><h2>6. 图标</h2>
+    <table>
+      <tr><td>风格</td><td>线条图标,24 网格,线宽 1.75,圆头圆角</td></tr>
+      <tr><td>尺寸</td><td>18:侧栏、读信工具栏;16:按钮、表格、菜单、搜索框;40:空状态</td></tr>
+      <tr><td>颜色</td><td>侧栏和工具栏图标平时灰,悬停或选中变深;菜单里的删除图标随文字变红</td></tr>
+      <tr><td>规则</td><td>图标必须和内容相关;只有图标的按钮必须有悬停提示</td></tr>
     </table>
   </section>
 
-  <!-- 6 布局 -->
-  <section class="blk" id="l">
-    <h2>6. 页面布局</h2>
-    <div class="demo">
-      <span class="ann" style="left:6px;top:6px">左右 60(电脑)/ 40(平板)/ 12(手机),顶部 24</span>
-      <div class="row"><b>页面标题</b><span class="btn">次按钮</span><span class="btn primary">主按钮</span></div>
-      <div class="d" style="height:44px">标签块 · 高 44</div>
-      <div class="d" style="height:52px">筛选块 · 上下 12,左右 24</div>
-      <div class="d" style="height:120px;outline:1px dashed #d13438;outline-offset:-1px">主体块(表格 / 表单)· 内容离块边 24</div>
-      <span class="ann" style="right:6px;bottom:6px">块与块之间 16</span>
-    </div>
-    <table class="spec">
-      <tr><th>项目</th><th>标准</th></tr>
-      <tr><td>外框</td><td>顶栏 56、侧栏 240,都是白底,用一条分隔线和内容区隔开</td></tr>
-      <tr><td>收件箱</td><td>信件列表(340–420 宽)+ 读信区,白底铺满,中间一条分隔线</td></tr>
-      <tr><td>页面</td><td>浅灰底,内容铺满;从上到下:标题行 → 标签块 → 筛选块 → 主体块</td></tr>
-      <tr><td>高度</td><td>最后一个白块向下撑满屏幕,离底部 24(和顶部一样),底边和侧栏最下面的「设置」对齐;随屏幕高度自动伸缩,内容多时整页往下滚。表格块的「共 N 个」固定在块底部</td></tr>
-      <tr><td>标题行</td><td>高 36;左:页面标题(可跟一句 13 灰色说明,间距 12);右:搜索框 260、次按钮、主按钮(主按钮在最右)</td></tr>
+  <section class="blk" id="l"><h2>7. 布局</h2>
+    <table>
+      <tr><td>外框</td><td>没有顶栏。左侧栏(浅灰底)+ 右侧内容(白底),中间一条细线</td></tr>
+      <tr><td>侧栏</td><td>从上到下:Logo 和名称 → 搜索(按 / 聚焦)→ 写信 → 邮箱切换(管理员)→ 文件夹 →「工具」临时邮箱 →「管理」概览、账号和地址(管理员)→ 底部:设置、自己的头像和地址(点开有退出登录)</td></tr>
+      <tr><td>收件箱</td><td>信件列表 + 读信两栏。列表顶部:文件夹名、收件地址筛选、刷新;下面一排「全部 / 未读 / 带附件」</td></tr>
+      <tr><td>页面</td><td>页头(标题 + 一句说明,右边放主要操作)→ 下划线标签(如有)→ 内容</td></tr>
+      <tr><td>管理</td><td>「概览」单独一页;「账号和地址」下分标签:账号、别名和群组、临时邮箱、发信、品牌、记录</td></tr>
     </table>
   </section>
 
-  <!-- 7 组件 -->
-  <section class="blk" id="k">
-    <h2>7. 组件</h2>
-
-    <h3>按钮</h3>
-    <div class="flex"><span class="btn primary"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>新建账号</span><span class="btn">批量创建</span><span class="lnk">编辑</span><span class="lnk">重设密码</span><span class="lnk red">删除</span></div>
-    <table class="spec">
-      <tr><th>类型</th><th>标准</th></tr>
-      <tr><td>主按钮</td><td>蓝底白字;高 32、圆角 4、最小宽 80、左右 14、字 14/600;悬停 #115ea3</td></tr>
-      <tr><td>次按钮</td><td>白底、#d1d1d1 边、黑字;悬停 #f5f5f5</td></tr>
-      <tr><td>文字按钮</td><td>表格操作:蓝字 14/400,之间 16;删除用红字;悬停加下划线</td></tr>
-      <tr><td>图标按钮</td><td>36×36,图标 20,无边框,悬停浅灰底;必须有文字提示</td></tr>
-      <tr><td>状态</td><td>禁用 60% 透明;键盘聚焦 2px 蓝色外框,离按钮 2</td></tr>
-    </table>
-
-    <h3>输入框、搜索框、下拉框</h3>
-    <div class="flex"><span class="input" style="width:260px"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>搜索账号</span><span class="input" style="width:200px">例如 you@gmail.com</span><span class="input" style="width:160px">按最近登录 ▾</span></div>
-    <table class="spec">
-      <tr><th>类型</th><th>标准</th></tr>
-      <tr><td>输入框</td><td>高 32、圆角 4、左右 10;边框 #d1d1d1,底边 #616161;聚焦时底边 2px 蓝;禁用浅灰底;占位文字 --muted</td></tr>
-      <tr><td>页面搜索框</td><td>在标题行右侧,宽 260、高 32;左边放 16 的放大镜,离左 10,文字从 32 开始;输入即筛选</td></tr>
-      <tr><td>全局搜索框</td><td>在顶栏,最宽 640、高 36;图标离左 12,文字从 36 开始</td></tr>
-      <tr><td>下拉框</td><td>同输入框;排序框宽 160、字 13</td></tr>
-      <tr><td>多行文本</td><td>上下 6、左右 10,行高 20,可上下拉伸</td></tr>
-      <tr><td>地址输入</td><td>输入框 + 右侧灰色「@域名」后缀,等宽字体 13</td></tr>
-    </table>
-
-    <h3>单选、勾选、开关</h3>
-    <div class="radio"><i class="on"></i><span>直接转发<small>原样转发，需在 Cloudflare 验证目标邮箱</small></span></div>
-    <table class="spec">
-      <tr><th>类型</th><th>标准</th></tr>
-      <tr><td>单选</td><td>一行一个;圆圈 16,离文字 8;选项名 14,下方说明 12 灰色,间距 0;选项之间 4(每行上下 6)</td></tr>
-      <tr><td>勾选</td><td>方框 16,离文字 8,整行高 32</td></tr>
-      <tr><td>开关</td><td>40×20;关:灰边 + 灰圆点;开:蓝底白点;离文字 8</td></tr>
-    </table>
-
-    <h3>标签、筛选、小标签、状态</h3>
-    <div class="tabsx"><span class="tab on"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 14.5-4 16 0"/></svg>账户</span><span class="tab"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>转发</span><span class="tab">自动回复</span></div>
-    <div class="flex"><span class="chip on">全部 12</span><span class="chip">使用中 11</span><span class="chip">已停用 1</span><span class="tag">我的邮箱</span><span class="dot">正常</span><span class="dot warn">即将到期</span><span class="dot bad">失败</span><span class="dot off">已停用</span></div>
-    <table class="spec">
-      <tr><th>类型</th><th>标准</th></tr>
-      <tr><td>标签</td><td>高 44;每个标签左右 12(相邻文字间距 24,第一个离块边 24);图标 16 离文字 8;选中:蓝字 600 + 底部 2px 蓝线</td></tr>
-      <tr><td>筛选按钮</td><td>高 28、圆角 4、左右 10、字 13;灰底;选中浅蓝底蓝字;之间 8;带数量「使用中 11」</td></tr>
-      <tr><td>小标签</td><td>高 24、圆角 4、左右 8、字 12、灰底;「管理员」用浅蓝底蓝字</td></tr>
-      <tr><td>状态</td><td>6px 圆点 + 13 文字,间距 6;正常绿、提醒黄、失败红、停用灰</td></tr>
-      <tr><td>计数</td><td>标题旁的数字:圆角 4、左右 6、字 12/600、灰底</td></tr>
-    </table>
-
-    <h3>表格</h3>
-    <div>
-      <table class="tb"><thead><tr><th>账号</th><th>状态</th><th>用量</th><th>操作</th></tr></thead>
-        <tbody><tr><td><b>Bob</b><div class="s">bob@demo-test.xyz</div></td><td><span class="dot">正常</span></td><td>614 B<div class="s">4 封</div></td><td><span class="lnk">编辑</span><span class="lnk red">删除</span></td></tr>
-        <tr><td><b>carol</b><div class="s">carol@demo-test.xyz</div></td><td><span class="dot off">已停用</span></td><td>117 B<div class="s">1 封</div></td><td><span class="lnk">编辑</span><span class="lnk red">删除</span></td></tr></tbody></table>
-      <div class="foot">共 2 个账号</div>
-    </div>
-    <p class="note">表头高 44、#fafafa 底、14/600;单元格上下 14、左右 16,首尾列 24;第一行 14 主文字,第二行 13 灰色,两行间距 2;行之间 1px 分隔线,悬停浅灰;最后一列「操作」;底部「共 N 个」13 灰色靠右,上下 12。手机上每行变成一张卡片。</p>
-
-    <h3>表单</h3>
-    <div class="form">
-      <div class="in">
-        <b style="font-size:16px;line-height:22px">转发到外部邮箱</b>
-        <div class="field">转发到<span class="input">例如 you@gmail.com</span></div>
-        <div class="field">转发方式<div class="radio"><i class="on"></i><span>直接转发<small>原样转发，需在 Cloudflare 验证目标邮箱</small></span></div></div>
-      </div>
-      <div class="ft"><span class="btn primary">保存</span><span class="btn">取消</span></div>
-    </div>
-    <p class="note">块内边距 24;块标题 → 第一个字段 16;字段之间 16;字段名(14 常规)→ 控件 4;内容最宽 880;两列字段之间 16;保存区:上方分隔线、上下 16、左右 24,主按钮在左。</p>
-
-    <h3>提示条、空状态、弹窗、菜单、提示</h3>
-    <table class="spec">
-      <tr><th>类型</th><th>标准</th></tr>
-      <tr><td>页面提示条</td><td>白块样式;上下 12、左右 24;左边 16 图标(离文字 12),右边文字链接;出错时浅红底</td></tr>
-      <tr><td>读信提示</td><td>浅灰底、1px 分隔线边、圆角 4;上下 8、左右 12;字 13</td></tr>
-      <tr><td>空状态</td><td>居中;48 图标(50% 透明)→ 8 → 一句话,字 14 灰色;表格里上下 48</td></tr>
-      <tr><td>弹窗</td><td>宽 540、圆角 8、内边距 24;标题 20/28 → 内容 8;字段之间 16;按钮靠右、之间 8、上方 24;关闭按钮在右上</td></tr>
-      <tr><td>下拉菜单</td><td>圆角 8、内边距 8、阴影;每项高 36、左右 12、圆角 4,图标 20 离文字 12</td></tr>
-      <tr><td>操作提示</td><td>左下角深色条,圆角 8、上下 12、左右 20,2 秒后消失</td></tr>
-    </table>
-
-    <h3>侧栏、顶栏、信件列表</h3>
-    <div class="navx"><span class="on"><svg class="i l" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>收件箱</span><span><svg class="i l" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>星标</span></div>
-    <table class="spec">
-      <tr><th>类型</th><th>标准</th></tr>
-      <tr><td>侧栏</td><td>宽 240、内边距 12;写信按钮和菜单同宽、高 36;菜单图标 20 离文字 12,离左 12;选中:浅灰底 + 左侧 3px 蓝线 + 600;分组之间 16,用分隔线隔开;设置固定在底部</td></tr>
-      <tr><td>顶栏</td><td>高 56、底部分隔线;左:菜单按钮 + Logo 32 + 品牌名 16/600;中:全局搜索;右:头像 32</td></tr>
-      <tr><td>信件列表</td><td>标题栏高 48(标题 16/600);每封信上下 12、左 20、右 16;发件人 14、主题 14、摘要 13 灰;未读:600 + 左侧蓝点 6;时间 12 灰</td></tr>
-      <tr><td>读信</td><td>工具栏高 48;主题 20/28;头像 40 离发件人 16;正文从头像右侧对齐开始(左 88),行高 1.7</td></tr>
+  <section class="blk" id="k"><h2>8. 组件</h2>
+    <table>
+      <tr><th>组件</th><th>标准</th></tr>
+      <tr><td>主按钮</td><td>蓝底白字,高 34,圆角 6,左右 14,字 500;放在一组按钮的最右</td></tr>
+      <tr><td>次按钮</td><td>白底 #d4d4d8 边;幽灵按钮无边框(撤销、取消类)</td></tr>
+      <tr><td>输入框</td><td>高 34,圆角 6,#d4d4d8 边;聚焦时蓝边 + 3px 浅蓝光圈;禁用浅灰底</td></tr>
+      <tr><td>搜索框</td><td>左边 16 放大镜,文字从 32 开始;侧栏搜索框右边显示快捷键「/」</td></tr>
+      <tr><td>分段选择</td><td>浅灰底槽,选中项白底 + 细阴影;每项高 28,字 13,可带数量(灰色小字)</td></tr>
+      <tr><td>标签</td><td>下划线式:之间 24,高 40;选中黑字 600 + 底部 2px 黑线</td></tr>
+      <tr><td>选项卡片</td><td>单选用卡片:边框圆角 8,内边距 12/14;选中蓝边 + 浅蓝底;标题 14/500,说明 13 灰</td></tr>
+      <tr><td>开关</td><td>36×20,开蓝关灰,离文字 10</td></tr>
+      <tr><td>表格框</td><td>1px 边框圆角 8;顶部工具栏(分段筛选 → 搜索 → 排序);表头 36 浅灰、字 12 灰;单元格上下 12 左右 16;第二行信息 13 灰;底部「共 N 个」</td></tr>
+      <tr><td>行操作</td><td>行尾「⋯」,悬停才显示;菜单宽 200,项高 32;删除放最后,上面一条分隔线,红字</td></tr>
+      <tr><td>状态</td><td>6px 圆点 + 13 文字;「管理员」用浅蓝小标签</td></tr>
+      <tr><td>卡片</td><td>概览指标卡:边框圆角 8,内边距 16/18;标题 13 灰 → 数字 26 → 说明 12 灰</td></tr>
+      <tr><td>弹窗</td><td>宽 500,圆角 12;标题 17 + 一句说明;内容 16/24;底栏浅灰、上边一条线,按钮靠右</td></tr>
+      <tr><td>提示</td><td>屏幕底部居中的深色小条,圆角 8,2.6 秒后消失</td></tr>
+      <tr><td>空状态</td><td>居中,40 图标(半透明)+ 一句话</td></tr>
     </table>
   </section>
 
-  <!-- 8 屏幕宽度 -->
-  <section class="blk" id="w">
-    <h2>8. 屏幕宽度</h2>
-    <table class="spec">
-      <tr><th>宽度</th><th>变化</th></tr>
-      <tr><td>&gt; 1100 电脑</td><td>内容区左右 60;概览数字 6 列;图表和排行并排;收件箱两栏</td></tr>
-      <tr><td>761–1100 平板</td><td>左右 40;概览数字 3 列;图表和排行上下排;收件箱单栏(点信后进入读信)</td></tr>
-      <tr><td>≤ 760 手机</td><td>左右 12;白块内边距 16;块间 12;侧栏收进左上菜单;表格每行一张卡片;标题行按钮换行占满</td></tr>
+  <section class="blk" id="x"><h2>9. 交互</h2>
+    <table>
+      <tr><td>信件列表</td><td>悬停时右上角出现:星标、标为已读/未读、删除(垃圾箱里是移回);未读左侧蓝点</td></tr>
+      <tr><td>读信</td><td>顶部工具栏只放图标(回复、全部回复、转发 | 星标、未读、下载、删除);正文下方放「回复」「全部回复」「转发」按钮</td></tr>
+      <tr><td>搜索</td><td>侧栏搜索框输入即搜;按 / 聚焦,按 Esc 清空;在其他页面搜索会自动回到信件列表</td></tr>
+      <tr><td>临时邮箱</td><td>页面顶部一行:输入前缀(或骰子随机)+ 有效期 → 「创建并复制」,不开弹窗</td></tr>
+      <tr><td>设置</td><td>改了内容,底部浮出「有修改还没保存」+ 撤销 / 保存修改;一次保存整页</td></tr>
+      <tr><td>危险操作</td><td>删除、停用、断开先确认,写明后果</td></tr>
     </table>
   </section>
 
-  <!-- 9 文案 -->
-  <section class="blk" id="x">
-    <h2>9. 文案</h2>
-    <table class="spec">
-      <tr><th>项目</th><th>标准</th></tr>
-      <tr><td>标点</td><td>中文用全角标点(,。:;?!「」()),中英文之间、中文与数字之间空一格</td></tr>
-      <tr><td>按钮</td><td>动词开头,2–4 个字:新建、保存、删除、重设密码;不写「点击这里」</td></tr>
-      <tr><td>说明</td><td>一句话说清楚,不超过一行;能不写就不写</td></tr>
-      <tr><td>确认</td><td>删除、停用等不可撤销操作先确认,写明后果:「删除后已收到的信会保留」</td></tr>
-      <tr><td>提示</td><td>操作成功用短句:「已保存」「已删除」;失败说原因和怎么办</td></tr>
+  <section class="blk" id="w"><h2>10. 屏幕宽度</h2>
+    <table>
+      <tr><td>&gt; 1100 电脑</td><td>收件箱两栏;概览指标 4 列;设置左右两栏;页面左右 40</td></tr>
+      <tr><td>761–1100 平板</td><td>收件箱单栏(点信进入读信);指标 2 列;图表和排行上下排;页面左右 28</td></tr>
+      <tr><td>≤ 760 手机</td><td>顶部出现菜单条,侧栏从左滑出;设置改为上下排;表格每行一张卡片,「⋯」固定在卡片右上;页面左右 16</td></tr>
+    </table>
+  </section>
+
+  <section class="blk" id="y"><h2>11. 文案</h2>
+    <table>
+      <tr><td>标点</td><td>中文用全角标点;中英文、中文与数字之间空一格</td></tr>
+      <tr><td>标题说明</td><td>页面和分区标题下各一句话,说清这里做什么,不超过一行</td></tr>
+      <tr><td>按钮</td><td>动词开头,2–6 个字:新建账号、创建并复制、保存修改</td></tr>
+      <tr><td>提示</td><td>成功用短句(已保存、已复制);失败说原因和怎么办</td></tr>
     </table>
   </section>
 </div>

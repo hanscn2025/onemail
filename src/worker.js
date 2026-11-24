@@ -138,6 +138,10 @@ async function api(request, env, url) {
       const n = `?${args.length} ESCAPE '\\'`;
       where += ` AND (subject LIKE ${n} OR from_addr LIKE ${n} OR from_name LIKE ${n} OR snippet LIKE ${n} OR to_json LIKE ${n})`;
     }
+    // 列表筛选:未读 / 带附件
+    const filter = url.searchParams.get('filter');
+    if (filter === 'unread') where += ' AND seen = 0';
+    if (filter === 'attach') where += ' AND has_attach = 1';
     const rcpt = (url.searchParams.get('rcpt') || '').toLowerCase();
     if (rcpt) { args.push(rcpt); where += ` AND envelope_to = ?${args.length}`; }
     if (before) { args.push(before); where += ` AND date < ?${args.length}`; }
