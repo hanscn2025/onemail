@@ -531,3 +531,16 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
   .table-wrap { overflow: visible; }
   .toast { left: var(--s4); right: var(--s4); bottom: var(--s4); max-width: none; }
 }
+/* 链接做成次按钮的样子(跳转外部网站) */
+.btn-link { display: inline-flex; align-items: center; gap: var(--s2); height: var(--h); padding: 0 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--text); font-weight: 600; }
+.btn-link:hover { background: var(--hover); text-decoration: none; }
+.btn-link .ic { width: 16px; height: 16px; }
+/* 开关块:标题 + 一句说明在左,开关在右;打开后下面展开配置 */
+.t-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s4); max-width: none !important; }
+.t-title { display: grid; gap: var(--s1); min-width: 0; }
+.t-title .hint { color: var(--muted); }
+.t-head .switch { min-height: 0; margin-top: 1px; }
+.t-head .switch input:disabled + .track { opacity: .5; cursor: default; }
+.t-body { display: grid; gap: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line-soft); max-width: none !important; }
+.t-body > :not(.actions) { max-width: 880px; }
+.tpanel .t-body .actions { margin-top: var(--s2); }

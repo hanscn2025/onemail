@@ -5,6 +5,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // 线条图标(24x24，描边)
 const ICONS = {
+  external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   compose: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2 2 0 0 1 3 3l-9 9a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86Z"/>',
   filepen: '<path d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M13.38 15.63a1 1 0 1 0-3-3l-5.02 5.01a2 2 0 0 0-.5.86l-.84 2.87a.5.5 0 0 0 .62.62l2.87-.84a2 2 0 0 0 .86-.5Z"/>',
@@ -464,7 +465,8 @@ function closePage() {
 }
 
 async function openPage(name) {
-  if (name === 'settings/temp') name = 'admin/temps';
+  if (name === 'settings/temp' || name === 'admin/temps') name = 'temp';
+  if (name === 'admin/addresses') name = 'admin/overview';
   if (name === 'admin/notify') name = 'settings/notify';
   const [base, tab] = name.split('/');
   if (!PAGES[base]) return;
@@ -555,19 +557,63 @@ function fwdModeField(mode = 'cf', name = 'fwd_mode') {
     </div></div>`;
 }
 
+// 开关块:右上角一个开关;关着只显示标题和一句说明,打开才展开配置
+function togglePanel({ id, title, desc, on, body, tag = 'section', attrs = '', locked = false }) {
+  return `<${tag} class="panel tpanel" id="${id}" ${attrs}>
+    <div class="t-head"><div class="t-title"><h2>${title}</h2><p class="hint">${desc}</p></div>
+      <label class="switch" title="${locked ? '这里不能关闭' : on ? '关闭' : '打开'}"><input type="checkbox" data-toggle ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}><span class="track"></span></label></div>
+    <div class="t-body ${on ? '' : 'hidden'}">${body}</div>
+  </${tag}>`;
+}
+// active:现在是不是已经开通;off():关闭(确认 + 保存),做了就返回 true
+function wireToggle(panel, { active, off } = {}) {
+  if (!panel) return;
+  const cb = $('[data-toggle]', panel), bd = $('.t-body', panel);
+  cb.onchange = async () => {
+    if (cb.checked) { bd.classList.remove('hidden'); $('input:not([type=checkbox]):not([type=radio]):not([disabled]), textarea', bd)?.focus(); return; }
+    if (!active) { bd.classList.add('hidden'); return; }
+    if (!off || !(await off())) cb.checked = true;
+  };
+}
+
+// 转发状态:看最近一次转发记录;可以发测试信验证;直接转发要在 Cloudflare 验证目标邮箱
+const CF_ROUTING = 'https://dash.cloudflare.com/?to=/:account/:zone/email/routing/overview';
+function fwdStatusPanel(s) {
+  const st = s.fwd_status;
+  const line = !st ? `${badge('neutral', '还没转发过')}<span class="muted">发一封测试信确认能不能收到</span>`
+    : st.ok ? `${badge('ok', '转发正常')}<span class="muted">最近一次 ${fmtDate(st.at, true)}</span>`
+      : `${badge('bad', '转发失败')}<span class="muted">${fmtDate(st.at, true)} · ${esc(st.detail)}</span>`;
+  const cf = s.fwd_mode !== 'send';
+  return `<section class="panel">
+    <h2>转发状态</h2>
+    <p class="status-line">${line}</p>
+    ${cf ? `<p class="hint">直接转发要先在 Cloudflare「电子邮件路由 → 目标地址」添加 <strong>${esc(s.fwd_to)}</strong>，并点开对方收到的验证邮件。${state.me.is_admin ? '' : '这一步需要管理员操作。'}</p>` : ''}
+    <div class="actions">
+      ${state.me.can_send ? '<button class="primary" type="button" id="fwdTest">发测试信</button>' : ''}
+      ${cf && state.me.is_admin ? `<a class="btn-link" href="${CF_ROUTING}" target="_blank" rel="noopener">${icon('external', 'sm')}去 Cloudflare 验证</a>` : ''}
+    </div>
+    ${state.me.can_send ? '' : '<p class="hint">还没开通发信，没法发测试信：给自己的邮箱发一封信，再回来看状态。</p>'}
+  </section>`;
+}
+
 // ---------- 临时邮箱收件地址(管理中心 → 临时邮箱) ----------
 // r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
 function tempTargetPanel(r) {
   const custom = !!r.catch_all_fwd;
   const box = r.catch_all || state.me.address;
-  return `<form class="panel" data-target>
-    <div class="sec-head"><h2>临时邮箱收件地址</h2></div>
+  const on = r.catch_all_on !== false;
+  return `<form class="panel tpanel" data-target>
+    <div class="t-head"><div class="t-title"><h2>任意前缀收信</h2>
+      <p class="hint">${on ? `任意名字@${esc(r.domain || '')} 都能收信，第一次收到时自动加进下面的列表` : '已关闭：只有新建过的临时地址能收信，其他地址的信会被退回'}</p></div>
+      <label class="switch" title="${on ? '关闭' : '打开'}"><input type="checkbox" data-toggle ${on ? 'checked' : ''}><span class="track"></span></label></div>
+    <div class="t-body ${on ? '' : 'hidden'}">
+    <div class="field"><span class="field-title">收到的信送到</span>
     <div class="choice">
       <label class="radio-card"><input type="radio" name="mode" value="admin" ${custom ? '' : 'checked'}>
         <span><strong>管理员邮箱</strong><span class="muted sm">${esc(box)}</span></span></label>
       <label class="radio-card"><input type="radio" name="mode" value="custom" ${custom ? 'checked' : ''}>
         <span><strong>外部邮箱</strong><span class="muted sm">Gmail、QQ 邮箱等</span></span></label>
-    </div>
+    </div></div>
     <div data-custom class="stack ${custom ? '' : 'hidden'}">
       <label>收件邮箱<input name="fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="例如 you@gmail.com"></label>
       ${fwdModeField(r.catch_all_fwd_mode)}
@@ -575,11 +621,23 @@ function tempTargetPanel(r) {
         管理员邮箱里也保留一份</label>
     </div>
     <div class="actions"><button class="primary" type="submit">保存</button></div>
+    </div>
   </form>`;
 }
 
 function wireTempTarget(form, r, after) {
   const sync = () => $('[data-custom]', form).classList.toggle('hidden', form.mode.value !== 'custom');
+  // 开关:马上保存
+  const cb = $('[data-toggle]', form);
+  cb.onchange = async () => {
+    const on = cb.checked;
+    if (!on && !confirm('关闭后，没新建过的地址收到的信都会被退回，确定吗？')) { cb.checked = true; return; }
+    try {
+      await api('/admin/routing', { method: 'POST', json: { catch_all_on: on } });
+      toast(on ? '已打开任意前缀收信' : '已关闭任意前缀收信，最多 30 秒后生效');
+      if (after) await after();
+    } catch (x) { toast(x.message); cb.checked = !on; }
+  };
   $$('[name=mode]', form).forEach((x) => (x.onchange = sync));
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -692,19 +750,23 @@ function newTempDialog(domain) {
 
 async function pageTemp() {
   const all = state.me.is_admin && state.tempAll;
-  const { items, domain, defaults } = await api('/temp' + (all ? '?all=1' : ''));
+  const [{ items, domain, defaults, catch_all_on }, route] = await Promise.all([
+    api('/temp' + (all ? '?all=1' : '')), state.me.is_admin ? api('/admin/routing') : null,
+  ]);
   tempDefaults = defaults || null;
-  const d = defaults;
-  page.innerHTML = `<div class="pg-col">${head('临时邮箱', `任意前缀 <code>@${esc(domain)}</code> 都能直接收信`, `
+  const anyOn = catch_all_on !== false;
+  page.innerHTML = `<div class="pg-col">${head('临时邮箱', anyOn ? `任意前缀 <code>@${esc(domain)}</code> 都能直接收信` : '新建临时地址后才能收信', `
     ${searchBox('tempQ', '搜索地址或备注')}
     ${state.me.is_admin ? `<label class="check"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
     <button class="primary" id="newTemp">${icon('plus')}新建</button>`)}
+    ${route ? tempTargetPanel(route) : ''}
     ${tempBar(items)}
     ${tempRows(items, all, pageTemp)}
   </div>`;
   wire();
   $('#newTemp').onclick = () => newTempDialog(domain);
   if ($('#tempAll')) $('#tempAll').onchange = (e) => { state.tempAll = e.target.checked; pageTemp(); };
+  if (route) wireTempTarget($('[data-target]', page), route, pageTemp);
   wireList($('.temp-rows', page), { searchEl: $('#tempQ'), sortEl: $('#sortSel', page) });
 }
 
@@ -737,7 +799,7 @@ function clientPanel() {
 
 // ---------- 个人设置：分类标签页，和管理中心同一种结构 ----------
 const SETTINGS_TABS = [
-  ['account', '账户', 'user'], ['security', '安全', 'shield'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'autoreply'],
+  ['account', '账户', 'user'], ['security', '安全', 'shield'], ['forward', '转发设置', 'forward'], ['autoreply', '自动回复', 'autoreply'],
   ['notify', '通知', 'bell'], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
@@ -770,13 +832,13 @@ async function pageSettings(tab = 'account') {
       <div class="actions"><button class="primary" type="submit">修改密码</button><span class="error" id="pwErr"></span></div>
     </form>`,
     forward: `
-    <form class="panel" data-sec>
-      <h2>转发到外部邮箱</h2>
-      <label>转发到<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
+    ${togglePanel({ id: 'fwdPanel', tag: 'form', attrs: 'data-sec data-reload="forward"', on: !!s.fwd_to,
+      title: '转发到外部邮箱', desc: '收到的信自动转到 Gmail、QQ 邮箱等外部邮箱', body: `
+      <label>转发到<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com" required></label>
       ${fwdModeField(s.fwd_mode)}
       <label class="check"><input type="checkbox" name="fwd_keep" ${s.fwd_keep ? 'checked' : ''}> 转发后在这里也保留一份</label>
-      <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form>`,
+      <div class="actions"><button class="primary" type="submit">保存</button></div>` })}
+    ${s.fwd_to ? fwdStatusPanel(s) : ''}`,
     autoreply: `
     <form class="panel" data-sec>
       <h2>自动回复</h2>
@@ -787,24 +849,19 @@ async function pageSettings(tab = 'account') {
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>`,
     client: clientPanel(),
-    notify: !s.tg_bot ? `
-    <section class="panel">
-      <h2>Telegram 通知</h2>
-      <p class="status-line">${badge('neutral', '未开通')}<span class="muted">${state.me.is_admin ? '先在上面设置机器人' : '管理员还没设置 Telegram 机器人'}</span></p>
-    </section>` : !s.tg_bound ? `
-    <section class="panel">
-      <h2>Telegram 通知</h2>
-      <p class="status-line">${badge('neutral', '未绑定')}<span class="muted">新邮件推送到你的 Telegram</span></p>
-      <div class="actions"><button class="primary" type="button" id="tgBind">绑定 Telegram</button></div>
-      <p class="muted sm hidden" id="tgWait">在 Telegram 里点「开始」，完成后这里会自动刷新。</p>
-    </section>` : `
-    <form class="panel" data-sec>
-      <h2>Telegram 通知</h2>
-      <p class="status-line">${badge('ok', '已绑定')}<span class="muted">机器人 @${esc(s.tg_bot)}</span></p>
-      <label class="check"><input type="checkbox" name="tg_body" ${s.tg_body ? 'checked' : ''}> 推送正文摘要</label>
-      <label class="check"><input type="checkbox" name="tg_bulk" ${s.tg_bulk ? 'checked' : ''}> 群发、订阅类邮件也推送</label>
-      <div class="actions"><button class="primary" type="submit">保存</button><button type="button" id="tgTest">发送测试消息</button><button type="button" id="tgUnbind">解除绑定</button></div>
-    </form>`,
+    notify: !s.tg_bot
+      ? togglePanel({ id: 'tgUser', title: 'Telegram 通知', on: false, locked: true, body: '',
+        desc: state.me.is_admin ? '先打开上面的「Telegram 机器人」' : '管理员还没设置 Telegram 机器人，暂时用不了' })
+      : !s.tg_bound
+        ? togglePanel({ id: 'tgUser', title: 'Telegram 通知', desc: '新邮件推送到你的 Telegram', on: false, body: `
+          <p class="hint">点下面的按钮会打开 Telegram，在机器人里点「开始」就绑定好了。</p>
+          <div class="actions"><button class="primary" type="button" id="tgBind">绑定 Telegram</button></div>
+          <p class="muted sm hidden" id="tgWait">在 Telegram 里点「开始」，完成后这里会自动刷新。</p>` })
+        : togglePanel({ id: 'tgUser', tag: 'form', attrs: 'data-sec', title: 'Telegram 通知', desc: '新邮件推送到你的 Telegram', on: true, body: `
+          <p class="status-line">${badge('ok', '已绑定')}<span class="muted">机器人 @${esc(s.tg_bot)}</span></p>
+          <label class="check"><input type="checkbox" name="tg_body" ${s.tg_body ? 'checked' : ''}> 推送正文摘要</label>
+          <label class="check"><input type="checkbox" name="tg_bulk" ${s.tg_bulk ? 'checked' : ''}> 群发、订阅类邮件也推送</label>
+          <div class="actions"><button class="primary" type="submit">保存</button><button type="button" id="tgTest">发送测试消息</button></div>` }),
   }[tab];
   page.innerHTML = `<div class="pg-col">${head('设置')}
   <div class="blk tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
@@ -828,13 +885,32 @@ async function pageSettings(tab = 'account') {
       if (x && x.tg_bound) { clearInterval(t); toast('已绑定 Telegram'); pageSettings('notify'); }
     }, 3000);
   };
+  if ($('#fwdTest')) $('#fwdTest').onclick = async () => {
+    const b = $('#fwdTest');
+    b.disabled = true; b.textContent = '发送中…';
+    try {
+      const { at } = await api('/fwd/test', { method: 'POST' });
+      b.textContent = '等待转发结果…';
+      for (let n = 0; n < 20; n++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        if (!$('#fwdTest')) return;
+        const x = await api('/settings').catch(() => null);
+        if (x?.fwd_status && x.fwd_status.at >= at) { toast(x.fwd_status.ok ? '转发成功' : '转发失败，看下方原因'); pageSettings('forward'); return; }
+      }
+      toast('1 分钟内没收到转发结果，请稍后刷新或到「记录」里看'); pageSettings('forward');
+    } catch (x) { toast(x.message); b.disabled = false; b.textContent = '发测试信'; }
+  };
   if ($('#tgTest')) $('#tgTest').onclick = async () => {
     try { await api('/tg/test', { method: 'POST' }); toast('已发送，去 Telegram 看看'); } catch (x) { toast(x.message); }
   };
-  if ($('#tgUnbind')) $('#tgUnbind').onclick = async () => {
-    if (!confirm('解除后不再推送新邮件，确定吗？')) return;
-    try { await api('/tg/unbind', { method: 'POST' }); toast('已解除绑定'); pageSettings('notify'); } catch (x) { toast(x.message); }
-  };
+  wireToggle($('#fwdPanel'), { active: !!s.fwd_to, off: async () => {
+    if (!confirm('关闭后不再转发，确定吗？')) return false;
+    try { await api('/settings', { method: 'POST', json: { fwd_to: '' } }); toast('已关闭转发'); pageSettings('forward'); return true; } catch (x) { toast(x.message); return false; }
+  } });
+  wireToggle($('#tgUser'), { active: !!s.tg_bound, off: async () => {
+    if (!confirm('关闭后不再推送新邮件，确定吗？')) return false;
+    try { await api('/tg/unbind', { method: 'POST' }); toast('已关闭 Telegram 通知'); pageSettings('notify'); return true; } catch (x) { toast(x.message); return false; }
+  } });
   $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(form), j = {};
@@ -844,7 +920,7 @@ async function pageSettings(tab = 'account') {
       else if (el.name === 'ar_until') j.ar_until = el.value ? new Date(el.value + 'T00:00:00').getTime() + DAY_MS : 0;
       else j[el.name] = f.get(el.name);
     }
-    try { await api('/settings', { method: 'POST', json: j }); state.me = await api('/me'); toast('已保存'); } catch (x) { toast(x.message); }
+    try { await api('/settings', { method: 'POST', json: j }); state.me = await api('/me'); toast('已保存'); if (form.dataset.reload) pageSettings(form.dataset.reload); } catch (x) { toast(x.message); }
   }));
   if ($('#pwForm2')) $('#pwForm2').onsubmit = async (e) => {
     e.preventDefault();
@@ -857,8 +933,8 @@ async function pageSettings(tab = 'account') {
 
 // ---------- 管理中心 ----------
 const ADMIN_TABS = [
-  ['overview', '概览', 'chart'], ['users', '账号', 'users'], ['addresses', '别名和群组', 'at'],
-  ['temps', '临时邮箱', 'mailclock'], ['brand', '品牌', 'palette'], ['send', '发信', 'send'], ['logs', '记录', 'history'],
+  ['overview', '概览', 'chart'], ['users', '账号管理', 'users'], ['brand', '品牌设置', 'palette'],
+  ['send', '发信设置', 'send'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -1102,46 +1178,50 @@ const ADMIN = {
       settings: [badge('ok', '已开通'), `Resend Key 结尾 …${esc(r.tail)}`],
       cloudflare: [badge('warn', 'Cloudflare 发信'), '需要 Workers 付费版。填了 Resend Key 会改用 Resend'],
     }[r.source] || [badge('neutral', '未开通'), '填一个 Resend API Key 就能发信'];
-    el.innerHTML = `<div class="narrow-col"><section class="panel">
-      <h2>发信（Resend）</h2>
+    const on = !!r.source;
+    el.innerHTML = `<div class="narrow-col">${togglePanel({ id: 'sendPanel', title: '发信（Resend）', on,
+      locked: r.source === 'secret' || r.source === 'cloudflare',
+      desc: '开通后才能写信、回复和发测试信', body: `
       <p class="status-line">${status[0]}<span class="muted">${status[1]}</span></p>
       <form id="resendForm2" class="inline-form ${r.source === 'secret' ? 'hidden' : ''}">
-        <input name="key" type="password" placeholder="re_ 开头的 API Key" autocomplete="off">
+        <input name="key" type="password" placeholder="${r.source === 'settings' ? '换一个 Key' : 're_ 开头的 API Key'}" autocomplete="off">
         <button class="primary" type="submit">保存</button>
-        ${r.source === 'settings' ? '<button type="button" id="resendClear2">清除</button>' : ''}
       </form>
       <ol class="steps">
         <li>在 <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> 添加并验证域名 <code>${esc((state.me.domains || [])[0] || '')}</code></li>
         <li>创建 API Key，粘贴到上面</li>
-      </ol>
-    </section></div>`;
+      </ol>` })}</div>`;
     const save = async (key) => {
       try { const x = await api('/admin/send', { method: 'POST', json: { key } }); toast(x.note); state.me = await api('/me'); ADMIN.send(el); } catch (x) { toast(x.message); }
     };
     $('#resendForm2').onsubmit = (e) => { e.preventDefault(); const k = e.target.key.value.trim(); if (k) save(k); };
-    if ($('#resendClear2')) $('#resendClear2').onclick = () => { if (confirm('清除后就不能发信了，确定吗？')) save(''); };
+    wireToggle($('#sendPanel'), { active: r.source === 'settings', off: async () => {
+      if (!confirm('关闭后就不能发信了，确定吗？')) return false;
+      await save(''); return true;
+    } });
   },
 
   async notify(el) {
     const r = await api('/admin/telegram');
-    el.innerHTML = `<section class="panel">
-      <h2>Telegram 机器人 <span class="count">管理员</span></h2>
-      <p class="status-line">${r.bot ? `${badge('ok', '已连接')}<span class="muted">@${esc(r.bot)}，${r.bound} 人已绑定</span>` : `${badge('neutral', '未设置')}<span class="muted">设置后，每个人可以在这里绑定自己的 Telegram</span>`}</p>
+    el.innerHTML = togglePanel({ id: 'tgBot', title: 'Telegram 机器人 <span class="count">管理员</span>', on: !!r.bot,
+      desc: '设置后，每个人都可以在下面绑定自己的 Telegram', body: `
+      ${r.bot ? `<p class="status-line">${badge('ok', '已连接')}<span class="muted">@${esc(r.bot)}，${r.bound} 人已绑定</span></p>` : ''}
       <form id="tgForm" class="inline-form">
         <input name="token" type="password" placeholder="${r.bot ? '换一个机器人 Token' : '机器人 Token，如 123456789:AAH…'}" autocomplete="off">
         <button class="primary" type="submit">保存</button>
-        ${r.bot ? '<button type="button" id="tgClear">断开</button>' : ''}
       </form>
       <ol class="steps">
-        <li>在 Telegram 打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>,发送 <code>/newbot</code>,按提示给机器人起名</li>
+        <li>在 Telegram 打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>，发送 <code>/newbot</code>，按提示给机器人起名</li>
         <li>复制它回复的 Token，粘贴到上面保存</li>
-      </ol>
-    </section>`;
+      </ol>` });
     const save = async (token) => {
       try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); pageSettings('notify'); } catch (x) { toast(x.message); }
     };
     $('#tgForm').onsubmit = (e) => { e.preventDefault(); const t = e.target.token.value.trim(); if (t) save(t); };
-    if ($('#tgClear')) $('#tgClear').onclick = () => { if (confirm('断开后所有人的 Telegram 绑定都会解除，确定吗？')) save(''); };
+    wireToggle($('#tgBot'), { active: !!r.bot, off: async () => {
+      if (!confirm('关闭后所有人的 Telegram 绑定都会解除，确定吗？')) return false;
+      await save(''); return true;
+    } });
   },
 
   async logs(el, type = 'mail', q = '') {

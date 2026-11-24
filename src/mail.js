@@ -54,6 +54,8 @@ export async function route(env, rcpt) {
     return out;
   }
   out.via = 'catchall';
+  // 关了「任意前缀收信」:没新建过的地址一律退回
+  if (!env.CATCH_ALL_ON) { out.reject = 'Address not found'; return out; }
   catchAll(env, out);
   if (!out.reject) {
     // 第一次收到信的前缀自动登记成临时地址，之后可以在临时邮箱里单独停用或改设置

@@ -120,6 +120,7 @@ async function loadConfig(env) {
     resendKey: env.RESEND_API_KEY || s.resend_key || '',
     catchAllFwd: s.catch_all_fwd || '',
     catchAllFwdMode: s.catch_all_fwd_mode || 'cf',
+    catchAllOn: s.catch_all_off !== '1',       // 任意前缀收信,默认打开
     tgToken: s.tg_token || '',
     tgBot: s.tg_bot || '',
     tgSecret: s.tg_secret || '',
@@ -140,6 +141,7 @@ export async function withConfig(env) {
     RESEND_API_KEY: { value: cfg.resendKey },
     CATCH_ALL_FWD: { value: cfg.catchAllFwd },
     CATCH_ALL_FWD_MODE: { value: cfg.catchAllFwdMode },
+    CATCH_ALL_ON: { value: cfg.catchAllOn },
     TG_TOKEN: { value: cfg.tgToken },
     TG_BOT: { value: cfg.tgBot },
     TG_SECRET: { value: cfg.tgSecret },

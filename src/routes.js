@@ -1,7 +1,7 @@
 // 临时地址、个人设置、草稿、管理后台(账号、别名群组、收信规则、统计、记录)
 import { hashPassword } from './auth.js';
 import { saveSetting, getSetting } from './config.js';
-import { snippetOf } from './mail.js';
+import { snippetOf, sendOut } from './mail.js';
 import { tgCall, tgLink } from './telegram.js';
 
 const json = (data, status = 200) =>
@@ -124,6 +124,7 @@ export async function extra(path, method, request, env, user, url) {
       ar_on: !!u.ar_on, ar_subject: u.ar_subject, ar_body: u.ar_body, ar_until: u.ar_until,
       quota_mb: u.quota_mb, used, send_limit: u.send_limit, sent_24h: sent,
       tg_bot: env.TG_TOKEN ? env.TG_BOT : '', tg_bound: !!u.tg_chat, tg_body: !!u.tg_body, tg_bulk: !!u.tg_bulk,
+      fwd_status: await fwdStatus(env, u),
     });
   }
   if (path === '/settings' && method === 'POST') {
@@ -146,6 +147,21 @@ export async function extra(path, method, request, env, user, url) {
     return json({ ok: true });
   }
 
+  // 发测试信:从自己的地址发给自己,走完整的收信 → 转发流程
+  if (path === '/fwd/test' && method === 'POST') {
+    const u = await env.DB.prepare('SELECT address, name, fwd_to FROM users WHERE id = ?').bind(user.id).first();
+    if (!u.fwd_to) return err('还没设置转发地址');
+    if (!env.RESEND_API_KEY && !env.EMAIL) return err('还没开通发信，没法发测试信');
+    const at = Date.now();
+    try {
+      await sendOut(env, {
+        from: { email: u.address, name: u.name || '' }, to: [u.address], cc: [], bcc: [], attachments: [],
+        subject: 'OneMail 转发测试', text: `这是一封转发测试信。如果你在 ${u.fwd_to} 收到了它，说明转发设置成功。`,
+      });
+    } catch (e) { return err(`测试信没发出去：${e.message}`); }
+    return json({ ok: true, at });
+  }
+
   // ---------- 临时地址(每个人管自己的；管理员加 ?all=1 看全部) ----------
   if (path === '/temp' && method === 'GET') {
     await backfillAuto(env);
@@ -157,6 +173,7 @@ export async function extra(path, method, request, env, user, url) {
     ).bind(...(all ? [] : [user.address])).all();
     const out = { items: r.results.map(addrRow), domain: domainsOf(env)[0] || '' };
     // 默认规则就是兜底规则；管理员能看能改
+    out.catch_all_on = !!env.CATCH_ALL_ON;
     if (user.is_admin) out.defaults = { box: env.CATCH_ALL || '', fwd: env.CATCH_ALL_FWD || '', locked: !!env.CATCH_ALL_LOCKED };
     return json(out);
   }
@@ -429,10 +446,11 @@ export async function extra(path, method, request, env, user, url) {
 
   // ---------- 收信规则：发到不存在地址的信 ----------
   if (path === '/admin/routing' && method === 'GET') {
-    return json({ catch_all: env.CATCH_ALL || '', catch_all_fwd: env.CATCH_ALL_FWD || '', catch_all_fwd_mode: env.CATCH_ALL_FWD_MODE || 'cf', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
+    return json({ catch_all_on: !!env.CATCH_ALL_ON, catch_all: env.CATCH_ALL || '', catch_all_fwd: env.CATCH_ALL_FWD || '', catch_all_fwd_mode: env.CATCH_ALL_FWD_MODE || 'cf', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
   }
   if (path === '/admin/routing' && method === 'POST') {
     const b = await body(request);
+    if ('catch_all_on' in b) await saveSetting(env, 'catch_all_off', b.catch_all_on ? null : '1');
     if ('catch_all' in b) {
       if (env.CATCH_ALL_LOCKED) return err('兜底邮箱写在配置文件里（CATCH_ALL），这里改不了');
       const box = lower(b.catch_all);
@@ -488,4 +506,13 @@ export async function extra(path, method, request, env, user, url) {
   }
 
   return null;
+}
+
+// 最近一次转发到这个外部地址的结果
+async function fwdStatus(env, u) {
+  if (!u.fwd_to) return null;
+  const r = await env.DB.prepare(
+    "SELECT kind, at, detail FROM logs WHERE kind IN ('forward', 'forward_fail') AND detail LIKE ? ORDER BY at DESC LIMIT 1"
+  ).bind(`%${u.fwd_to}%`).first();
+  return r ? { ok: r.kind === 'forward', at: r.at, detail: r.detail } : null;
 }

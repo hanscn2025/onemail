@@ -5,11 +5,10 @@
 A webmail that runs entirely on Cloudflare. Mail sent to `anything@your-domain` lands in your web inbox. No server needed, and personal use fits within Cloudflare's free tier.
 
 - **Receive at any address**: any prefix `@your-domain` works. Each message shows which address it was sent to, and you can filter by address
-- **Temporary addresses**: write any prefix when signing up and it receives mail; after its first message it appears in the temporary address list, where you can add a note, set an expiry or disable it (later mail bounces). Where this mail goes is one global setting: the admin mailbox by default, or a custom mailbox such as Gmail
+- **Temporary addresses**: write any prefix when signing up and it receives mail; after its first message it appears in the temporary address list, where you can add a note, set an expiry or disable it (later mail bounces). Where this mail goes is one global setting: the admin mailbox by default, or a custom mailbox such as Gmail. Admins can turn off "receive at any prefix"; then only temporary addresses you created receive mail
 - **Business-style accounts**: separate accounts for family or teammates; each person signs in, sends and receives, and sees only their own mail. Bulk creation is supported
-- **Aliases and groups**: `sales@` lands in alice's inbox and she can send as it; `team@` delivers one message to several members (external addresses allowed)
 - **Full mail features**: compose, reply, forward, drafts, signature, auto-reply, forwarding to an external mailbox; replies default to the address the mail was sent to
-- **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), aliases and groups, all temporary addresses, sending setup, and login / delivery / sending logs
+- **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), branding, sending setup, and login / delivery / sending logs
 - Remote images are blocked by default (anti-tracking), HTML mail is rendered in a sandbox, and trash is emptied after 30 days
 - `name+anything@domain` goes to the same mailbox
 
@@ -41,7 +40,7 @@ Note: if this domain already uses another mail service (Google Workspace, Micros
 
 1. To an **account address**: into that account's inbox, and also forwarded if the account has forwarding set
 2. To an **alias, group or temporary address**: according to its own settings; disabled or expired addresses bounce
-3. To **any other address** (temporary addresses): handled by Settings → Temporary mail destination, which stores it in the admin mailbox by default or forwards it to a custom mailbox
+3. To **any other address** (temporary addresses): handled by Temporary mail → 任意前缀收信 (receive at any prefix), which stores it in the admin mailbox by default or forwards it to a custom mailbox; when that switch is off, the message bounces
 
 ## Forwarding to external mailboxes
 
@@ -68,7 +67,7 @@ Receiving works without this. To send mail, use Resend's free tier (100 emails/d
 
 1. Sign up for free at [resend.com](https://resend.com) and add your domain under **Domains**. Choose the automatic Cloudflare setup to have the DNS records added for you, then wait until the status is **Verified**.
 2. Under **API Keys**, create a key (**Sending access** is enough) and copy it.
-3. Sign in as admin → 管理中心 (Admin center) → 发信 (Sending), paste the key and save. The page tells you whether your domain has been verified.
+3. Sign in as admin → 管理中心 (Admin center) → 发信设置 (Sending), turn the switch on, paste the key and save. The page tells you whether your domain has been verified.
 
 The free quota is shared by all accounts; you can set a per-account daily send limit under Admin console → Accounts.
 
