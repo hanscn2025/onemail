@@ -5,6 +5,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // 线条图标(24x24,描边)
 const ICONS = {
+  bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   compose: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2 2 0 0 1 3 3l-9 9a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86Z"/>',
   filepen: '<path d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M13.38 15.63a1 1 0 1 0-3-3l-5.02 5.01a2 2 0 0 0-.5.86l-.84 2.87a.5.5 0 0 0 .62.62l2.87-.84a2 2 0 0 0 .86-.5Z"/>',
   mailclock: '<path d="M22 10.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><circle cx="18" cy="18" r="4"/><path d="M18 16.5V18l1 1"/>',
@@ -167,6 +168,7 @@ async function boot() {
   if (['inbox', 'starred', 'sent', 'drafts', 'trash'].includes(h)) state.folder = h;
   if (h === 'temp' || h.startsWith('settings') || (h.startsWith('admin') && state.me.is_admin)) { openPage(h); return; }
   await loadList();
+  if (h.startsWith('msg/')) openMsg(h.slice(4));
 }
 $('#boxSel').onchange = (e) => { state.box = e.target.value; state.rcpt = ''; closeReader(); loadList(); };
 
@@ -689,7 +691,7 @@ function clientPanel() {
 // ---------- 个人设置:分类标签页,和管理中心同一种结构 ----------
 const SETTINGS_TABS = [
   ['account', '账户', 'user'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'autoreply'],
-  ['temp', '临时邮箱', 'mailclock', true], ['client', '客户端', 'devices'],
+  ['notify', '通知', 'bell'], ['temp', '临时邮箱', 'mailclock', true], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
   const tabs = SETTINGS_TABS.filter((t) => !t[3] || state.me.is_admin);
@@ -739,6 +741,24 @@ async function pageSettings(tab = 'account') {
     </form>`,
     temp: route ? tempTargetPanel(route) : '',
     client: clientPanel(),
+    notify: !s.tg_bot ? `
+    <section class="panel">
+      <h2>Telegram 通知</h2>
+      <p class="status-line">${badge('neutral', '未开通')}<span class="muted">管理员还没设置 Telegram 机器人${state.me.is_admin ? ',<a data-goto-tg>去设置</a>' : ''}</span></p>
+    </section>` : !s.tg_bound ? `
+    <section class="panel">
+      <h2>Telegram 通知</h2>
+      <p class="status-line">${badge('neutral', '未绑定')}<span class="muted">绑定后新邮件会推送到你的 Telegram</span></p>
+      <div class="actions"><button class="primary" type="button" id="tgBind">绑定 Telegram</button></div>
+      <p class="muted sm hidden" id="tgWait">在 Telegram 里点「开始」,完成后这里会自动刷新。</p>
+    </section>` : `
+    <form class="panel" data-sec>
+      <h2>Telegram 通知</h2>
+      <p class="status-line">${badge('ok', '已绑定')}<span class="muted">机器人 @${esc(s.tg_bot)}</span></p>
+      <label class="check"><input type="checkbox" name="tg_body" ${s.tg_body ? 'checked' : ''}> 推送正文摘要</label>
+      <label class="check"><input type="checkbox" name="tg_bulk" ${s.tg_bulk ? 'checked' : ''}> 群发、订阅类邮件也推送</label>
+      <div class="actions"><button class="primary" type="submit">保存</button><button type="button" id="tgTest">发送测试消息</button><button type="button" id="tgUnbind">解除绑定</button></div>
+    </form>`,
   }[tab];
   page.innerHTML = `${head('设置')}
   <div class="tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
@@ -747,6 +767,28 @@ async function pageSettings(tab = 'account') {
   $$('[data-stab]', page).forEach((a) => (a.onclick = () => openPage('settings/' + a.dataset.stab)));
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
   if ($('[data-goto-send]', page)) $('[data-goto-send]', page).onclick = () => openPage('admin/send');
+  if ($('[data-goto-tg]', page)) $('[data-goto-tg]', page).onclick = () => openPage('admin/notify');
+  if ($('#tgBind')) $('#tgBind').onclick = async () => {
+    const w = window.open('', '_blank'); // 先开窗口,避免被浏览器当成弹窗拦掉
+    try {
+      const { url } = await api('/tg/link', { method: 'POST' });
+      if (w) w.location = url; else location.href = url;
+    } catch (x) { if (w) w.close(); toast(x.message); return; }
+    $('#tgWait').classList.remove('hidden');
+    let n = 0;
+    const t = setInterval(async () => {
+      if (++n > 100 || !$('#tgWait')) { clearInterval(t); return; }
+      const x = await api('/settings').catch(() => null);
+      if (x && x.tg_bound) { clearInterval(t); toast('已绑定 Telegram'); pageSettings('notify'); }
+    }, 3000);
+  };
+  if ($('#tgTest')) $('#tgTest').onclick = async () => {
+    try { await api('/tg/test', { method: 'POST' }); toast('已发送,去 Telegram 看看'); } catch (x) { toast(x.message); }
+  };
+  if ($('#tgUnbind')) $('#tgUnbind').onclick = async () => {
+    if (!confirm('解除后不再推送新邮件,确定吗?')) return;
+    try { await api('/tg/unbind', { method: 'POST' }); toast('已解除绑定'); pageSettings('notify'); } catch (x) { toast(x.message); }
+  };
   if (route) wireTempTarget($('[data-target]', page), route, () => pageSettings('temp'));
   $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
     e.preventDefault();
@@ -771,7 +813,7 @@ async function pageSettings(tab = 'account') {
 // ---------- 管理中心 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号', 'users'], ['addresses', '别名和群组', 'at'],
-  ['temps', '临时地址', 'mailclock'], ['brand', '品牌', 'palette'], ['send', '发信', 'send'], ['logs', '记录', 'history'],
+  ['temps', '临时地址', 'mailclock'], ['brand', '品牌', 'palette'], ['send', '发信', 'send'], ['notify', '通知', 'bell'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -788,7 +830,7 @@ async function pageAdmin(tab = 'overview') {
 const LOG_KINDS = {
   login: ['ok', '登录成功'], login_fail: ['bad', '登录失败'], deliver: ['ok', '已投递'], reject: ['neutral', '已退回'],
   forward: ['ok', '已转发'], forward_fail: ['bad', '转发失败'], quota: ['warn', '邮箱已满'], autoreply: ['ok', '自动回复'],
-  autoreply_fail: ['bad', '自动回复失败'], send: ['ok', '已发送'], send_fail: ['bad', '发送失败'],
+  autoreply_fail: ['bad', '自动回复失败'], tg_fail: ['bad', '推送失败'], send: ['ok', '已发送'], send_fail: ['bad', '发送失败'],
 };
 
 const ADMIN = {
@@ -1029,6 +1071,28 @@ const ADMIN = {
     if ($('#resendClear2')) $('#resendClear2').onclick = () => { if (confirm('清除后就不能发信了,确定吗?')) save(''); };
   },
 
+  async notify(el) {
+    const r = await api('/admin/telegram');
+    el.innerHTML = `<div class="narrow-col"><section class="panel">
+      <h2>Telegram 通知</h2>
+      <p class="status-line">${r.bot ? `${badge('ok', '已连接')}<span class="muted">机器人 @${esc(r.bot)},${r.bound} 人已绑定</span>` : `${badge('neutral', '未设置')}<span class="muted">设置后,每个人可以在「设置 → 通知」绑定自己的 Telegram</span>`}</p>
+      <form id="tgForm" class="inline-form">
+        <input name="token" type="password" placeholder="${r.bot ? '换一个机器人 Token' : '机器人 Token,如 123456789:AAH…'}" autocomplete="off">
+        <button class="primary" type="submit">保存</button>
+        ${r.bot ? '<button type="button" id="tgClear">断开</button>' : ''}
+      </form>
+      <ol class="steps">
+        <li>在 Telegram 打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>,发送 <code>/newbot</code>,按提示给机器人起名</li>
+        <li>复制它回复的 Token,粘贴到上面保存</li>
+      </ol>
+    </section></div>`;
+    const save = async (token) => {
+      try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); ADMIN.notify(el); } catch (x) { toast(x.message); }
+    };
+    $('#tgForm').onsubmit = (e) => { e.preventDefault(); const t = e.target.token.value.trim(); if (t) save(t); };
+    if ($('#tgClear')) $('#tgClear').onclick = () => { if (confirm('断开后所有人的 Telegram 绑定都会解除,确定吗?')) save(''); };
+  },
+
   async logs(el, type = 'mail', q = '') {
     const { items } = await api(`/admin/logs?type=${type}&q=${encodeURIComponent(q)}`);
     const cols = type === 'login' ? ['时间', '结果', '账号', 'IP', '详情'] : ['时间', '结果', type === 'send' ? '发件人' : '发件人', type === 'send' ? '收件人' : '收件地址', '详情'];
@@ -1094,6 +1158,7 @@ const PAGES = { temp: pageTemp, settings: pageSettings, admin: pageAdmin };
 window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
   if (state.me && (h === 'temp' || h.startsWith('settings') || h.startsWith('admin'))) openPage(h);
+  else if (state.me && h.startsWith('msg/')) { closePage(); openMsg(h.slice(4)); }
 });
 
 fillIcons();

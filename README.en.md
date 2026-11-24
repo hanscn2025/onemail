@@ -76,6 +76,16 @@ Compose, reply and forward then work. Instead of the web page, you can also add 
 
 Alternatively, use Cloudflare's own Email Sending, which requires the Workers Paid plan: add `[[send_email]]` (`name = "EMAIL"`) to `wrangler.toml`, redeploy, then enable Email Sending for the domain in the dashboard.
 
+## Telegram notifications
+
+New mail can be pushed to Telegram. This does not go through Email Routing, needs no address verification and does not use your sending quota.
+
+1. In Telegram, open [@BotFather](https://t.me/BotFather), send `/newbot` and copy the token it gives you.
+2. Sign in as admin → 管理中心 → 通知 (Notifications), paste the token and save. Do this on your live https address so Telegram can call back.
+3. Each user opens 设置 → 通知 and clicks 绑定 Telegram (Connect Telegram), then taps Start in the bot.
+
+Users can choose whether to include a text preview and whether to push newsletters. Send `/stop` to the bot to disconnect. Note that the preview, if enabled, passes through Telegram's servers.
+
 ## Using Foxmail / Outlook
 
 Cloudflare Workers can't serve IMAP/POP3, so desktop clients can't log in directly. Instead:

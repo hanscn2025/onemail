@@ -2,6 +2,7 @@
 import { hashPassword } from './auth.js';
 import { saveSetting, getSetting } from './config.js';
 import { snippetOf } from './mail.js';
+import { tgCall, tgLink } from './telegram.js';
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -122,6 +123,7 @@ export async function extra(path, method, request, env, user, url) {
       name: u.name, signature: u.signature, fwd_to: u.fwd_to, fwd_keep: !!u.fwd_keep, fwd_mode: u.fwd_mode || 'cf',
       ar_on: !!u.ar_on, ar_subject: u.ar_subject, ar_body: u.ar_body, ar_until: u.ar_until,
       quota_mb: u.quota_mb, used, send_limit: u.send_limit, sent_24h: sent,
+      tg_bot: env.TG_TOKEN ? env.TG_BOT : '', tg_bound: !!u.tg_chat, tg_body: !!u.tg_body, tg_bulk: !!u.tg_bulk,
     });
   }
   if (path === '/settings' && method === 'POST') {
@@ -137,6 +139,8 @@ export async function extra(path, method, request, env, user, url) {
     if ('ar_subject' in b) put('ar_subject', clean(b.ar_subject, 200));
     if ('ar_body' in b) put('ar_body', clean(b.ar_body, 5000));
     if ('ar_until' in b) put('ar_until', Number(b.ar_until) || 0);
+    if ('tg_body' in b) put('tg_body', b.tg_body ? 1 : 0);
+    if ('tg_bulk' in b) put('tg_bulk', b.tg_bulk ? 1 : 0);
     if (!sets.length) return json({ ok: true });
     await env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...args, user.id).run();
     return json({ ok: true });
@@ -213,6 +217,23 @@ export async function extra(path, method, request, env, user, url) {
          snippet = excluded.snippet, size = excluded.size, date = excluded.date, from_addr = excluded.from_addr`
     ).bind(id, user.address, meta.from, JSON.stringify(list('to')), JSON.stringify(list('cc')), subject, snippetOf(text, ''), text.length, Date.now()).run();
     return json({ ok: true, id });
+  }
+
+  // ---------- Telegram 通知(每个人自己绑定) ----------
+  if (path === '/tg/link' && method === 'POST') {
+    if (!env.TG_TOKEN || !env.TG_BOT) return err('管理员还没设置 Telegram 机器人');
+    return json({ url: await tgLink(env, user.id) });
+  }
+  if (path === '/tg/unbind' && method === 'POST') {
+    await env.DB.prepare("UPDATE users SET tg_chat = '' WHERE id = ?").bind(user.id).run();
+    return json({ ok: true });
+  }
+  if (path === '/tg/test' && method === 'POST') {
+    const u = await env.DB.prepare('SELECT tg_chat FROM users WHERE id = ?').bind(user.id).first();
+    if (!env.TG_TOKEN || !u?.tg_chat) return err('还没绑定 Telegram');
+    const j = await tgCall(env.TG_TOKEN, 'sendMessage', { chat_id: u.tg_chat, text: `测试消息:${user.address} 的新邮件会推送到这里。` });
+    if (!j.ok) return err(`发送失败:${j.description || ''}`);
+    return json({ ok: true });
   }
 
   if (!path.startsWith('/admin/')) return null;
@@ -376,6 +397,36 @@ export async function extra(path, method, request, env, user, url) {
     }
   }
 
+  // ---------- Telegram 机器人 ----------
+  if (path === '/admin/telegram' && method === 'GET') {
+    const n = (await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE tg_chat != ''").first()).n;
+    return json({ bot: env.TG_TOKEN ? env.TG_BOT : '', bound: n, https: url.protocol === 'https:' });
+  }
+  if (path === '/admin/telegram' && method === 'POST') {
+    const b = await body(request);
+    const token = clean(b.token, 120);
+    if (!token) {
+      if (env.TG_TOKEN) await tgCall(env.TG_TOKEN, 'deleteWebhook', {});
+      for (const k of ['tg_token', 'tg_bot', 'tg_secret']) await saveSetting(env, k, null);
+      await env.DB.prepare("UPDATE users SET tg_chat = ''").run();
+      return json({ ok: true, note: '已断开机器人' });
+    }
+    if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return err('Token 格式不对,应该像 123456789:AAH... 这样');
+    const me = await tgCall(token, 'getMe');
+    if (!me.ok) return err(`Telegram 不认这个 Token:${me.description || ''}`);
+    const secret = [...crypto.getRandomValues(new Uint8Array(24))].map((x) => x.toString(16).padStart(2, '0')).join('');
+    let note = `已连接 @${me.result.username}`;
+    if (url.protocol === 'https:') {
+      const w = await tgCall(token, 'setWebhook', { url: `${url.origin}/tg/webhook`, secret_token: secret, allowed_updates: ['message'], drop_pending_updates: true });
+      if (!w.ok) return err(`设置机器人回调失败:${w.description || ''}`);
+    } else note += '。当前不是 https 地址,Telegram 回调不到这里,绑定要在线上使用';
+    await saveSetting(env, 'tg_token', token);
+    await saveSetting(env, 'tg_bot', me.result.username);
+    await saveSetting(env, 'tg_secret', secret);
+    await saveSetting(env, 'app_url', url.origin);
+    return json({ ok: true, note, bot: me.result.username });
+  }
+
   // ---------- 收信规则:发到不存在地址的信 ----------
   if (path === '/admin/routing' && method === 'GET') {
     return json({ catch_all: env.CATCH_ALL || '', catch_all_fwd: env.CATCH_ALL_FWD || '', catch_all_fwd_mode: env.CATCH_ALL_FWD_MODE || 'cf', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
@@ -426,7 +477,7 @@ export async function extra(path, method, request, env, user, url) {
   if (path === '/admin/logs' && method === 'GET') {
     const kinds = {
       login: ['login', 'login_fail'],
-      mail: ['deliver', 'reject', 'forward', 'forward_fail', 'quota', 'autoreply', 'autoreply_fail'],
+      mail: ['deliver', 'reject', 'forward', 'forward_fail', 'quota', 'autoreply', 'autoreply_fail', 'tg_fail'],
       send: ['send', 'send_fail'],
     }[url.searchParams.get('type')] || ['login', 'login_fail'];
     const q = lower(url.searchParams.get('q'));

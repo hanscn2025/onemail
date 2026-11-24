@@ -62,6 +62,7 @@ const SCHEMA = [
     ip TEXT NOT NULL DEFAULT '')`,
   `CREATE INDEX IF NOT EXISTS idx_logs_at ON logs(kind, at DESC)`,
   `CREATE TABLE IF NOT EXISTS autoreply_seen (key TEXT PRIMARY KEY, at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS tg_links (code TEXT PRIMARY KEY, user_id INTEGER NOT NULL, at INTEGER NOT NULL)`,
 ];
 
 // 老数据库升级时补上的列
@@ -78,6 +79,9 @@ const USER_COLUMNS = {
   ar_body: "TEXT NOT NULL DEFAULT ''",
   ar_until: 'INTEGER NOT NULL DEFAULT 0',
   last_login: 'INTEGER NOT NULL DEFAULT 0',
+  tg_chat: "TEXT NOT NULL DEFAULT ''",          // 绑定的 Telegram 聊天 id
+  tg_body: 'INTEGER NOT NULL DEFAULT 1',        // 推送时带正文摘要
+  tg_bulk: 'INTEGER NOT NULL DEFAULT 0',        // 群发、通知类邮件也推送
 };
 // auto=1:没提前建、第一次收到信时自动登记的地址,跟随兜底(默认)规则
 const ADDR_COLUMNS = { auto: 'INTEGER NOT NULL DEFAULT 0' };
@@ -116,6 +120,10 @@ async function loadConfig(env) {
     resendKey: env.RESEND_API_KEY || s.resend_key || '',
     catchAllFwd: s.catch_all_fwd || '',
     catchAllFwdMode: s.catch_all_fwd_mode || 'cf',
+    tgToken: s.tg_token || '',
+    tgBot: s.tg_bot || '',
+    tgSecret: s.tg_secret || '',
+    appUrl: s.app_url || '',
     catchAllLocked: env.CATCH_ALL !== undefined,
   };
   if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存,别的实例完成设置后这里能读到
@@ -132,6 +140,10 @@ export async function withConfig(env) {
     RESEND_API_KEY: { value: cfg.resendKey },
     CATCH_ALL_FWD: { value: cfg.catchAllFwd },
     CATCH_ALL_FWD_MODE: { value: cfg.catchAllFwdMode },
+    TG_TOKEN: { value: cfg.tgToken },
+    TG_BOT: { value: cfg.tgBot },
+    TG_SECRET: { value: cfg.tgSecret },
+    APP_URL: { value: cfg.appUrl },
     CATCH_ALL_LOCKED: { value: cfg.catchAllLocked },
   });
 }

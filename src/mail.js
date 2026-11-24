@@ -1,5 +1,6 @@
 // 收信入库、发信
 import PostalMime from 'postal-mime';
+import { tgNotify, isBulk } from './telegram.js';
 
 const addrList = (v) => (v || []).flatMap((a) => (a.group ? addrList(a.group) : [{ name: a.name || '', address: (a.address || '').toLowerCase() }]));
 
@@ -153,6 +154,7 @@ async function store(env, mailbox, p, raw, message) {
     p.subject || '', snippetOf(p.text, p.html), JSON.stringify(attach), visibleAttach.length ? 1 : 0,
     message.rawSize || raw.byteLength, Date.now()
   ).run();
+  return id;
 }
 
 // Email Routing 的 email() 入口
@@ -208,7 +210,17 @@ export async function receive(message, env) {
   const p = await PostalMime.parse(raw);
   for (const to of viaSend) await forwardViaSend(env, p, message, rcpt, to);
   if (!keep.length) return;
-  for (const u of keep) await store(env, u.address, p, raw, message);
+  const from = p.from?.address ? p.from : { address: message.from, name: '' };
+  const snippet = snippetOf(p.text, p.html);
+  const nAtt = (p.attachments || []).filter((a) => !(a.disposition === 'inline' && a.contentId)).length;
+  for (const u of keep) {
+    const id = await store(env, u.address, p, raw, message);
+    // Telegram 推送:绑定了才推;默认不推群发、通知类邮件
+    if (u.tg_chat && env.TG_TOKEN && (u.tg_bulk || !isBulk(p))) {
+      try { await tgNotify(env, u, { from, subject: p.subject, snippet, attachments: nAtt, rcpt, id }); }
+      catch (e) { await addLog(env, 'tg_fail', message.from, u.address, `Telegram 推送失败:${e.message}`); }
+    }
+  }
   await addLog(env, 'deliver', message.from, rcpt, keep.map((u) => u.address).join(', ') + (r.via !== 'user' ? `(${r.via})` : ''));
   for (const u of users) if (u.ar_on) await autoReply(env, u, p, p.from?.address || message.from, rcpt);
 }

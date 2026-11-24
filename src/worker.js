@@ -5,6 +5,7 @@ import {
 import { receive, sendOut, snippetOf, textToHtml, addLog } from './mail.js';
 import { extra, fromAddresses, brandRoutes } from './routes.js';
 import { withConfig, isConfigured, runSetup, getSetting, saveSetting } from './config.js';
+import { tgWebhook } from './telegram.js';
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
@@ -398,6 +399,10 @@ async function cleanupTrash(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // Telegram 机器人回调:用 secret_token 头校验,不走登录
+    if (url.pathname === '/tg/webhook' && request.method === 'POST') {
+      try { return await tgWebhook(request, await withConfig(env)); } catch (e) { console.error(e); return new Response('ok'); }
+    }
     if (url.pathname.startsWith('/api/')) {
       try {
         const cfgEnv = await withConfig(env);
