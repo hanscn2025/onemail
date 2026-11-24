@@ -36,7 +36,7 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_msg_trash ON messages(folder, moved_at)`,
   `CREATE TABLE IF NOT EXISTS login_fail (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
-  // 账号之外的地址:临时地址(temp)、别名(alias)、群组(group)
+  // 账号之外的地址：临时地址(temp)、别名(alias)、群组(group)
   `CREATE TABLE IF NOT EXISTS addresses (
     address TEXT PRIMARY KEY,
     kind TEXT NOT NULL,
@@ -83,7 +83,7 @@ const USER_COLUMNS = {
   tg_body: 'INTEGER NOT NULL DEFAULT 1',        // 推送时带正文摘要
   tg_bulk: 'INTEGER NOT NULL DEFAULT 0',        // 群发、通知类邮件也推送
 };
-// auto=1:没提前建、第一次收到信时自动登记的地址,跟随兜底(默认)规则
+// auto=1:没提前建、第一次收到信时自动登记的地址，跟随兜底(默认)规则
 const ADDR_COLUMNS = { auto: 'INTEGER NOT NULL DEFAULT 0' };
 
 let schemaReady = false;
@@ -126,11 +126,11 @@ async function loadConfig(env) {
     appUrl: s.app_url || '',
     catchAllLocked: env.CATCH_ALL !== undefined,
   };
-  if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存,别的实例完成设置后这里能读到
+  if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存，别的实例完成设置后这里能读到
   return cfg;
 }
 
-// 把配置叠到 env 上,其余代码继续用 env.SESSION_SECRET / env.DOMAINS / env.CATCH_ALL
+// 把配置叠到 env 上，其余代码继续用 env.SESSION_SECRET / env.DOMAINS / env.CATCH_ALL
 export async function withConfig(env) {
   const cfg = await loadConfig(env);
   return Object.create(env, {
@@ -167,18 +167,18 @@ export function isConfigured(env) {
 const DOMAIN_RE = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const LOCAL_RE = /^[a-z0-9._-]{1,64}$/;
 
-// 首次设置:只有还没设置过时才能调用,谁先完成谁就是管理员
+// 首次设置：只有还没设置过时才能调用，谁先完成谁就是管理员
 export async function runSetup(env, body, hashPassword) {
   const domain = String(body.domain || '').trim().toLowerCase().replace(/^@/, '');
   const local = String(body.user || '').trim().toLowerCase();
   const password = String(body.password || '');
-  if (!DOMAIN_RE.test(domain)) return { error: '域名格式不对,例如 example.com' };
+  if (!DOMAIN_RE.test(domain)) return { error: '域名格式不对，例如 example.com' };
   if (!LOCAL_RE.test(local)) return { error: '用户名只能用小写字母、数字、点、横线、下划线' };
   if (password.length < 10) return { error: '密码至少 10 位' };
   const address = `${local}@${domain}`;
   const secret = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('');
   try {
-    // 一个事务:第一条插入 setup_done,已经设置过就会因主键冲突整体失败
+    // 一个事务：第一条插入 setup_done,已经设置过就会因主键冲突整体失败
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO settings (key, value) VALUES ('setup_done', ?)`).bind(String(Date.now())),
       env.DB.prepare(`INSERT INTO settings (key, value) VALUES ('secret', ?), ('domains', ?), ('catch_all', ?)`).bind(secret, domain, address),
@@ -186,7 +186,7 @@ export async function runSetup(env, body, hashPassword) {
         .bind(address, '', await hashPassword(password), Date.now()),
     ]);
   } catch {
-    return { error: '已经设置过了,请直接登录', status: 409 };
+    return { error: '已经设置过了，请直接登录', status: 409 };
   }
   cached = null;
   return { ok: true, address };

@@ -1,8 +1,8 @@
 /* OneMail 样式,参考 Outlook 网页版。全站只用下面这几档:
-   字号 12 辅助 / 13 次要 / 14 正文 / 16 区块标题 / 20 页面标题(24 只用于统计数字)
+   字号 12 辅助 / 13 说明 / 14 正文、标签 / 16 选项标题 / 18 卡片标题 / 20 页面标题(24 只用于统计数字)
    字重 400 常规 / 600 强调
    圆角 4 标签 / 6 按钮、输入框、菜单项 / 8 卡片、弹窗、菜单;头像和开关是圆的
-   控件高 32;侧栏行高 36;图标 16(按钮、文字旁)/ 20(独立图标按钮、侧栏)
+   控件高 32(设置卡片里 36);侧栏行高 36;图标 16(按钮、文字旁)/ 20(独立图标按钮、侧栏)
    颜色 黑白灰为主,蓝色只用于主按钮、选中、链接、未读 */
 
 :root {
@@ -576,3 +576,53 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .logo-lg.has-img { background: var(--bg); }
 .file-btn.bordered { border: 1px solid var(--line); }
 .panel label.file-btn { display: inline-flex; gap: 6px; }
+
+/* ---------- 卡片式页面:浅灰底 + 白卡片,宽松留白 ---------- */
+:root { --canvas: #f5f6f8; }
+@media (prefers-color-scheme: dark) { :root { --canvas: #17181b; } }
+.page { background: var(--canvas); }
+.page-head { padding: 28px 32px 16px; }
+.page-body { padding: 20px 32px 48px; gap: 16px; align-content: start; }
+.tabs + .page-body { padding-top: 20px; }
+.page-body.narrow, .narrow-col { max-width: 960px; gap: 16px; }
+.panel label { gap: 8px; }
+.panel, .panel:last-child { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; padding: 24px; gap: 20px; }
+.panel h2 { font-size: 18px; }
+.panel label, .field-title { font-size: 14px; color: var(--text); }
+.panel input:not([type=checkbox]):not([type=radio]), .panel select { height: 36px; padding: 0 12px; }
+.panel textarea { padding: 8px 12px; }
+.panel .addr-input input { height: 34px; }
+.panel .actions button, .panel .inline-form button { height: 36px; padding: 0 16px; }
+.panel input[type=checkbox], .panel input[type=radio] { width: 16px; height: 16px; flex: none; }
+.check { font-weight: 400 !important; font-size: 14px; color: var(--text); }
+.field { gap: 10px; }
+.choice { gap: 16px; }
+.radio-card { padding: 20px; border-radius: 8px; min-height: 92px; }
+.radio-card > span { gap: 6px; }
+.radio-card strong { font-size: 16px; }
+.radio-card .muted.sm { font-size: 13px; line-height: 1.6; }
+.radio-card input { margin-top: 4px !important; }
+.status-line, .hint, .steps { font-size: 14px; }
+.tiles { padding-top: 0; }
+.tile { background: var(--surface); border-color: var(--line-soft); padding: 20px; }
+.two { gap: 16px; }
+.alert { margin-top: 0; background: var(--surface); font-size: 14px; }
+@media (max-width: 760px) {
+  .page-head { padding: 18px 16px 8px; }
+  .page-body { padding: 16px 16px 32px; }
+  .panel, .panel:last-child { padding: 16px; }
+  .choice { grid-template-columns: 1fr; }
+  .radio-card { min-height: 0; padding: 16px; }
+}
+.tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 弹窗表单和设置卡片同一套 */
+dialog { padding: 24px 28px; }
+.dlg-head strong { font-size: 18px; }
+.dlg-head { margin-bottom: 20px; }
+#editBody { gap: 20px; }
+#editBody label { gap: 8px; font-size: 14px; color: var(--text); }
+#editBody input:not([type=checkbox]):not([type=radio]), #editBody select { height: 36px; padding: 0 12px; }
+#editBody input[type=checkbox], #editBody input[type=radio] { width: 16px; height: 16px; flex: none; }
+#editForm .dlg-foot button, #editForm .actions button { height: 36px; padding: 0 16px; }

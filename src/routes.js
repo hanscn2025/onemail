@@ -24,18 +24,18 @@ async function taken(env, address) {
   return !!(u || a);
 }
 
-// 外部转发地址:必须是本域名以外的合法邮箱
+// 外部转发地址：必须是本域名以外的合法邮箱
 const FWD_MODES = ['cf', 'send'];
 function checkMode(env, v) {
   if (!FWD_MODES.includes(v)) return { error: '转发方式不对' };
-  if (v === 'send' && !env.RESEND_API_KEY) return { error: '还没开通 Resend 发信,不能用这种转发方式' };
+  if (v === 'send' && !env.RESEND_API_KEY) return { error: '还没开通 Resend 发信，不能用这种转发方式' };
   return { value: v };
 }
 
 function checkFwd(env, v) {
   const a = lower(v);
   if (!a) return { value: '' };
-  if (!EMAIL_RE.test(a)) return { error: `转发地址格式不对:${a}` };
+  if (!EMAIL_RE.test(a)) return { error: `转发地址格式不对：${a}` };
   if (isLocal(env, a)) return { error: '转发地址不能是本域名的地址(本域名内请用别名或群组)' };
   return { value: a };
 }
@@ -45,7 +45,7 @@ function randomLocal() {
   return [...crypto.getRandomValues(new Uint8Array(10))].map((n) => abc[n % abc.length]).join('');
 }
 
-// 当前用户可以用来发信的地址:自己、自己的别名、自己启用中的临时地址
+// 当前用户可以用来发信的地址：自己、自己的别名、自己启用中的临时地址
 export async function fromAddresses(env, user) {
   const r = await env.DB.prepare(
     `SELECT address, kind FROM addresses WHERE owner = ? AND kind IN ('alias', 'temp') AND enabled = 1 AND (expires_at = 0 OR expires_at > ?) ORDER BY kind, address`
@@ -55,7 +55,7 @@ export async function fromAddresses(env, user) {
 
 const addrRow = (a) => ({ ...a, members: JSON.parse(a.members || '[]') });
 
-// ---------- 品牌(系统名称、Logo):不用登录就能读,登录页也要显示 ----------
+// ---------- 品牌(系统名称、Logo):不用登录就能读，登录页也要显示 ----------
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
 export async function brandRoutes(path, method, env, url) {
   if (path === '/brand' && method === 'GET') {
@@ -70,7 +70,7 @@ export async function brandRoutes(path, method, env, url) {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'image/png',
         'Cache-Control': url.searchParams.get('v') ? 'public, max-age=31536000, immutable' : 'no-cache',
-        // SVG 也可能带脚本:单独打开时不让它运行
+        // SVG 也可能带脚本：单独打开时不让它运行
         'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
         'X-Content-Type-Options': 'nosniff',
       },
@@ -79,9 +79,9 @@ export async function brandRoutes(path, method, env, url) {
   return null;
 }
 
-// 升级前用过的前缀(收过信但没登记的地址)补登记成自动临时地址,只做一次
+// 升级前用过的前缀(收过信但没登记的地址)补登记成自动临时地址，只做一次
 async function backfillAuto(env) {
-  // 以前单独设过去向的临时地址:管理员的改成跟随全局设置,普通账号的改成进自己邮箱
+  // 以前单独设过去向的临时地址：管理员的改成跟随全局设置，普通账号的改成进自己邮箱
   if (!(await getSetting(env, 'temp_global_v1'))) {
     await env.DB.batch([
       env.DB.prepare(`UPDATE addresses SET auto = 1, deliver = 1, fwd_to = '' WHERE kind = 'temp' AND (owner IS NULL OR owner IN (SELECT address FROM users WHERE is_admin = 1))`),
@@ -146,7 +146,7 @@ export async function extra(path, method, request, env, user, url) {
     return json({ ok: true });
   }
 
-  // ---------- 临时地址(每个人管自己的;管理员加 ?all=1 看全部) ----------
+  // ---------- 临时地址(每个人管自己的；管理员加 ?all=1 看全部) ----------
   if (path === '/temp' && method === 'GET') {
     await backfillAuto(env);
     const all = user.is_admin && url.searchParams.get('all') === '1';
@@ -156,7 +156,7 @@ export async function extra(path, method, request, env, user, url) {
       `SELECT * FROM addresses WHERE kind = 'temp' ${all ? '' : 'AND ' + mine} ORDER BY MAX(last_at, created_at) DESC`
     ).bind(...(all ? [] : [user.address])).all();
     const out = { items: r.results.map(addrRow), domain: domainsOf(env)[0] || '' };
-    // 默认规则就是兜底规则;管理员能看能改
+    // 默认规则就是兜底规则；管理员能看能改
     if (user.is_admin) out.defaults = { box: env.CATCH_ALL || '', fwd: env.CATCH_ALL_FWD || '', locked: !!env.CATCH_ALL_LOCKED };
     return json(out);
   }
@@ -168,9 +168,9 @@ export async function extra(path, method, request, env, user, url) {
     if (!local) local = randomLocal();
     if (!LOCAL_RE.test(local) || local.includes('+')) return err('地址只能用小写字母、数字、点、横线、下划线');
     const address = `${local}@${domain}`;
-    if (await taken(env, address)) return err('这个地址已经被占用了,换一个');
+    if (await taken(env, address)) return err('这个地址已经被占用了，换一个');
     const days = Number(b.days) || 0;
-    // 去向不在这里设:管理员的临时地址跟随全局设置(设置 → 临时邮箱收件地址),普通账号的进自己邮箱
+    // 去向不在这里设：管理员的临时地址跟随全局设置(设置 → 临时邮箱收件地址),普通账号的进自己邮箱
     await env.DB.prepare(
       `INSERT INTO addresses (address, kind, owner, auto, note, expires_at, created_at) VALUES (?, 'temp', ?, ?, ?, ?, ?)`
     ).bind(address, user.address, user.is_admin ? 1 : 0, clean(b.note, 100), days ? Date.now() + days * DAY : 0, Date.now()).run();
@@ -231,8 +231,8 @@ export async function extra(path, method, request, env, user, url) {
   if (path === '/tg/test' && method === 'POST') {
     const u = await env.DB.prepare('SELECT tg_chat FROM users WHERE id = ?').bind(user.id).first();
     if (!env.TG_TOKEN || !u?.tg_chat) return err('还没绑定 Telegram');
-    const j = await tgCall(env.TG_TOKEN, 'sendMessage', { chat_id: u.tg_chat, text: `测试消息:${user.address} 的新邮件会推送到这里。` });
-    if (!j.ok) return err(`发送失败:${j.description || ''}`);
+    const j = await tgCall(env.TG_TOKEN, 'sendMessage', { chat_id: u.tg_chat, text: `测试消息：${user.address} 的新邮件会推送到这里。` });
+    if (!j.ok) return err(`发送失败：${j.description || ''}`);
     return json({ ok: true });
   }
 
@@ -283,7 +283,7 @@ export async function extra(path, method, request, env, user, url) {
     const b = await body(request);
     const address = lower(b.address);
     if (!EMAIL_RE.test(address) || address.includes('+')) return err('地址格式不对');
-    if (!isLocal(env, address)) return err(`只能用这些域名:${domainsOf(env).join(', ')}`);
+    if (!isLocal(env, address)) return err(`只能用这些域名：${domainsOf(env).join(', ')}`);
     if (String(b.password || '').length < 10) return err('密码至少 10 位');
     if (await taken(env, address)) return err('这个地址已经存在(账号、别名或临时地址)');
     const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
@@ -326,7 +326,7 @@ export async function extra(path, method, request, env, user, url) {
     }
     if (!m[2] && method === 'DELETE') {
       if (self) return err('不能删除自己');
-      // 只删账号和它的别名、临时地址;信件保留,管理员仍可在邮箱列表里查看
+      // 只删账号和它的别名、临时地址；信件保留，管理员仍可在邮箱列表里查看
       await env.DB.batch([
         env.DB.prepare('DELETE FROM users WHERE id = ?').bind(target.id),
         env.DB.prepare(`DELETE FROM addresses WHERE owner = ? AND kind IN ('alias', 'temp')`).bind(target.address),
@@ -359,7 +359,7 @@ export async function extra(path, method, request, env, user, url) {
       members = [...new Set((Array.isArray(b.members) ? b.members : String(b.members || '').split(/[,;，；\s]+/)).map(lower).filter(Boolean))];
       if (!members.length) return err('群组至少要有一个成员');
       const bad = members.find((x) => !EMAIL_RE.test(x));
-      if (bad) return err(`成员地址格式不对:${bad}`);
+      if (bad) return err(`成员地址格式不对：${bad}`);
       if (members.length > 50) return err('群组最多 50 个成员');
     }
     await env.DB.prepare(`INSERT INTO addresses (address, kind, owner, members, note, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -388,7 +388,7 @@ export async function extra(path, method, request, env, user, url) {
         const list = [...new Set((Array.isArray(b.members) ? b.members : String(b.members || '').split(/[,;，；\s]+/)).map(lower).filter(Boolean))];
         if (!list.length) return err('群组至少要有一个成员');
         const bad = list.find((x) => !EMAIL_RE.test(x));
-        if (bad) return err(`成员地址格式不对:${bad}`);
+        if (bad) return err(`成员地址格式不对：${bad}`);
         next.members = JSON.stringify(list);
       }
       await env.DB.prepare('UPDATE addresses SET enabled = ?, note = ?, owner = ?, members = ? WHERE address = ?')
@@ -411,15 +411,15 @@ export async function extra(path, method, request, env, user, url) {
       await env.DB.prepare("UPDATE users SET tg_chat = ''").run();
       return json({ ok: true, note: '已断开机器人' });
     }
-    if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return err('Token 格式不对,应该像 123456789:AAH... 这样');
+    if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return err('Token 格式不对，应该像 123456789:AAH... 这样');
     const me = await tgCall(token, 'getMe');
     if (!me.ok) return err(`Telegram 不认这个 Token:${me.description || ''}`);
     const secret = [...crypto.getRandomValues(new Uint8Array(24))].map((x) => x.toString(16).padStart(2, '0')).join('');
     let note = `已连接 @${me.result.username}`;
     if (url.protocol === 'https:') {
       const w = await tgCall(token, 'setWebhook', { url: `${url.origin}/tg/webhook`, secret_token: secret, allowed_updates: ['message'], drop_pending_updates: true });
-      if (!w.ok) return err(`设置机器人回调失败:${w.description || ''}`);
-    } else note += '。当前不是 https 地址,Telegram 回调不到这里,绑定要在线上使用';
+      if (!w.ok) return err(`设置机器人回调失败：${w.description || ''}`);
+    } else note += '。当前不是 https 地址，Telegram 回调不到这里，绑定要在线上使用';
     await saveSetting(env, 'tg_token', token);
     await saveSetting(env, 'tg_bot', me.result.username);
     await saveSetting(env, 'tg_secret', secret);
@@ -427,7 +427,7 @@ export async function extra(path, method, request, env, user, url) {
     return json({ ok: true, note, bot: me.result.username });
   }
 
-  // ---------- 收信规则:发到不存在地址的信 ----------
+  // ---------- 收信规则：发到不存在地址的信 ----------
   if (path === '/admin/routing' && method === 'GET') {
     return json({ catch_all: env.CATCH_ALL || '', catch_all_fwd: env.CATCH_ALL_FWD || '', catch_all_fwd_mode: env.CATCH_ALL_FWD_MODE || 'cf', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
   }

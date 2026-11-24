@@ -25,7 +25,7 @@ export async function addLog(env, kind, actor, target, detail = '', ip = '') {
 const domainsOf = (env) => (env.DOMAINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const isLocal = (env, a) => domainsOf(env).includes(String(a).split('@')[1]);
 
-// 决定一封信去哪:存进哪些邮箱、转发到哪些外部地址
+// 决定一封信去哪：存进哪些邮箱、转发到哪些外部地址
 // 返回 { boxes: Set, forwards: Map(外部地址 → 'cf'|'send'), reject: string|null, via: 'user'|'temp'|'alias'|'group'|'catchall' }
 export async function route(env, rcpt) {
   const out = { boxes: new Set(), forwards: new Map(), reject: null, via: '' };
@@ -41,7 +41,7 @@ export async function route(env, rcpt) {
     out.via = a.kind;
     if (!a.enabled || (a.expires_at && a.expires_at < Date.now())) { out.reject = 'Address not found'; return out; }
     if (a.kind === 'temp' && a.auto) {
-      // 自动登记的地址:按当前的默认规则送
+      // 自动登记的地址：按当前的默认规则送
       catchAll(env, out);
       await env.DB.prepare('UPDATE addresses SET hits = hits + 1, last_at = ? WHERE address = ?').bind(Date.now(), rcpt).run();
       return out;
@@ -56,7 +56,7 @@ export async function route(env, rcpt) {
   out.via = 'catchall';
   catchAll(env, out);
   if (!out.reject) {
-    // 第一次收到信的前缀自动登记成临时地址,之后可以在临时邮箱里单独停用或改设置
+    // 第一次收到信的前缀自动登记成临时地址，之后可以在临时邮箱里单独停用或改设置
     const box = (env.CATCH_ALL || '').trim().toLowerCase() || null;
     await env.DB.prepare(
       `INSERT OR IGNORE INTO addresses (address, kind, owner, auto, hits, last_at, created_at) VALUES (?, 'temp', ?, 1, 1, ?, ?)`
@@ -72,7 +72,7 @@ function catchAll(env, out) {
   if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
 }
 
-// 自动回复:同一个发件人 4 天内只回一次;群发、退信、自动邮件不回
+// 自动回复：同一个发件人 4 天内只回一次；群发、退信、自动邮件不回
 async function autoReply(env, u, p, sender, rcpt) {
   if (!u.ar_on || (u.ar_until && u.ar_until < Date.now())) return;
   if (!env.RESEND_API_KEY && !env.EMAIL) return;
@@ -84,11 +84,11 @@ async function autoReply(env, u, p, sender, rcpt) {
   const seen = await env.DB.prepare('SELECT at FROM autoreply_seen WHERE key = ?').bind(key).first();
   if (seen && seen.at > Date.now() - 4 * 86400000) return;
   await env.DB.prepare('INSERT INTO autoreply_seen (key, at) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at').bind(key, Date.now()).run();
-  const text = u.ar_body || '你好,我暂时不在,回来后会尽快回复你。';
+  const text = u.ar_body || '你好，我暂时不在，回来后会尽快回复你。';
   try {
     await sendOut(env, {
       from: { email: u.address, name: u.name || '' }, to: [s], cc: [], bcc: [],
-      subject: u.ar_subject || `自动回复:${p.subject || ''}`, text, html: textToHtml(text),
+      subject: u.ar_subject || `自动回复：${p.subject || ''}`, text, html: textToHtml(text),
       inReplyTo: p.messageId || null, references: p.messageId || null, attachments: [], autoReply: true,
     });
     await addLog(env, 'autoreply', u.address, s);
@@ -97,7 +97,7 @@ async function autoReply(env, u, p, sender, rcpt) {
   }
 }
 
-// 用发信服务把收到的信重新发给外部邮箱:主题、正文、附件不变,回复地址是原发件人
+// 用发信服务把收到的信重新发给外部邮箱：主题、正文、附件不变，回复地址是原发件人
 async function forwardViaSend(env, p, message, rcpt, to) {
   const from = p.from?.address ? p.from : { address: message.from, name: '' };
   try {
@@ -117,7 +117,7 @@ async function forwardViaSend(env, p, message, rcpt, to) {
     });
     await addLog(env, 'forward', message.from, rcpt, `通过发信服务转发到 ${to}`);
   } catch (e) {
-    await addLog(env, 'forward_fail', message.from, rcpt, `通过发信服务转发到 ${to} 失败:${e.message}`);
+    await addLog(env, 'forward_fail', message.from, rcpt, `通过发信服务转发到 ${to} 失败：${e.message}`);
   }
 }
 
@@ -172,7 +172,7 @@ export async function receive(message, env) {
     return;
   }
 
-  // 收件邮箱各自的设置:停用、容量、转发、自动回复
+  // 收件邮箱各自的设置：停用、容量、转发、自动回复
   const size = message.rawSize || 0;
   const users = [];
   for (const box of r.boxes) {
@@ -191,8 +191,8 @@ export async function receive(message, env) {
     return;
   }
 
-  // 两种转发:cf 由 Cloudflare 原样转发,只能发给在「电子邮件路由 → 目标地址」验证过的邮箱;
-  // send 用 Resend 重新发一封,不用验证,发件人是收信地址,回复会回到原发件人。没开通 Resend 时退回 cf。
+  // 两种转发：cf 由 Cloudflare 原样转发，只能发给在「电子邮件路由 → 目标地址」验证过的邮箱;
+  // send 用 Resend 重新发一封，不用验证，发件人是收信地址，回复会回到原发件人。没开通 Resend 时退回 cf。
   const viaSend = [];
   for (const [to, mode] of r.forwards) {
     if (mode === 'send' && env.RESEND_API_KEY) { viaSend.push(to); continue; }
@@ -200,7 +200,7 @@ export async function receive(message, env) {
       await message.forward(to);
       await addLog(env, 'forward', message.from, rcpt, `转发到 ${to}`);
     } catch (e) {
-      await addLog(env, 'forward_fail', message.from, rcpt, `转发到 ${to} 失败:${e.message}`);
+      await addLog(env, 'forward_fail', message.from, rcpt, `转发到 ${to} 失败：${e.message}`);
     }
   }
 
@@ -215,10 +215,10 @@ export async function receive(message, env) {
   const nAtt = (p.attachments || []).filter((a) => !(a.disposition === 'inline' && a.contentId)).length;
   for (const u of keep) {
     const id = await store(env, u.address, p, raw, message);
-    // Telegram 推送:绑定了才推;默认不推群发、通知类邮件
+    // Telegram 推送：绑定了才推；默认不推群发、通知类邮件
     if (u.tg_chat && env.TG_TOKEN && (u.tg_bulk || !isBulk(p))) {
       try { await tgNotify(env, u, { from, subject: p.subject, snippet, attachments: nAtt, rcpt, id }); }
-      catch (e) { await addLog(env, 'tg_fail', message.from, u.address, `Telegram 推送失败:${e.message}`); }
+      catch (e) { await addLog(env, 'tg_fail', message.from, u.address, `Telegram 推送失败：${e.message}`); }
     }
   }
   await addLog(env, 'deliver', message.from, rcpt, keep.map((u) => u.address).join(', ') + (r.via !== 'user' ? `(${r.via})` : ''));
@@ -235,7 +235,7 @@ function b64(bytes) {
   return btoa(s);
 }
 
-// 发信:设了 RESEND_API_KEY 走 Resend,否则走 Cloudflare Email Sending
+// 发信：设了 RESEND_API_KEY 走 Resend,否则走 Cloudflare Email Sending
 // m: { from:{email,name}, to[], cc[], bcc[], subject, text, html, inReplyTo, references, attachments:[{filename,type,bytes}] }
 export async function sendOut(env, m) {
   const headers = {};
@@ -288,7 +288,7 @@ export async function sendOut(env, m) {
   try {
     return (await env.EMAIL.send(Object.keys(headers).length ? { ...payload, headers } : payload)).messageId;
   } catch (e) {
-    // 万一回复头不在允许列表里,去掉再发一次
+    // 万一回复头不在允许列表里，去掉再发一次
     if (String(e.code || '').startsWith('E_HEADER')) return (await env.EMAIL.send(payload)).messageId;
     throw e;
   }

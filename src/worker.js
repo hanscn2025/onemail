@@ -22,7 +22,7 @@ function domainsOf(env) {
   return (env.DOMAINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
-// 当前用户能看哪个邮箱:普通用户只能看自己的;管理员可以用 ?mailbox= 看别的
+// 当前用户能看哪个邮箱：普通用户只能看自己的；管理员可以用 ?mailbox= 看别的
 function boxFor(user, url) {
   const want = (url.searchParams.get('mailbox') || '').toLowerCase();
   return user.is_admin && want ? want : user.address;
@@ -50,18 +50,18 @@ async function api(request, env, url) {
   const path = url.pathname.slice(4); // 去掉 /api
   const method = request.method;
 
-  // 改动类请求必须带这个头;跨站页面不能随便加自定义头,用来挡 CSRF
+  // 改动类请求必须带这个头；跨站页面不能随便加自定义头，用来挡 CSRF
   if (method !== 'GET' && request.headers.get('X-Mail') !== '1') return err('bad request', 403);
 
   const br = await brandRoutes(path, method, env, url);
   if (br) return br;
 
-  // 首次设置:还没有任何账号时,网页上先创建管理员
+  // 首次设置：还没有任何账号时，网页上先创建管理员
   if (path === '/setup') {
     const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first()).n;
     if (method === 'GET') return json({ needed: n === 0 });
     if (method === 'POST') {
-      if (n > 0) return err('已经设置过了,请直接登录', 409);
+      if (n > 0) return err('已经设置过了，请直接登录', 409);
       const r = await runSetup(env, await request.json().catch(() => ({})), hashPassword);
       if (r.error) return err(r.error, r.status || 400);
       const cfgEnv = await withConfig(env.__raw);
@@ -76,7 +76,7 @@ async function api(request, env, url) {
     const addr = String(address || '').trim().toLowerCase();
     const ip = request.headers.get('CF-Connecting-IP') || 'local';
     const keys = [`ip:${ip}`, `u:${addr}`];
-    if (await checkLocked(env, keys)) return err('失败次数太多,请 15 分钟后再试', 429);
+    if (await checkLocked(env, keys)) return err('失败次数太多，请 15 分钟后再试', 429);
     const u = await env.DB.prepare('SELECT * FROM users WHERE address = ?').bind(addr).first();
     if (!u || !(await verifyPassword(String(password || ''), u.pass_hash))) {
       await recordFail(env, keys);
@@ -211,7 +211,7 @@ async function api(request, env, url) {
       const a = JSON.parse(msg.attach_json).find((x) => x.i === Number(am[1]));
       const obj = a && (await env.BUCKET.get(`att/${msg.id}/${a.i}`));
       if (!obj) return err('没有这个附件', 404);
-      // 图片可以内嵌显示,其他一律下载,避免附件里的 HTML 在本站运行
+      // 图片可以内嵌显示，其他一律下载，避免附件里的 HTML 在本站运行
       const isImg = /^image\/(png|jpe?g|gif|webp|bmp)$/i.test(a.type) && url.searchParams.get('dl') !== '1';
       return new Response(obj.body, {
         headers: {
@@ -234,7 +234,7 @@ async function api(request, env, url) {
     const all = [...to, ...cc, ...bcc];
     if (!to.length) return err('请填收件人');
     const bad = all.find((a) => !EMAIL_RE.test(a));
-    if (bad) return err(`地址格式不对:${bad}`);
+    if (bad) return err(`地址格式不对：${bad}`);
     if (all.length > 50) return err('收件人最多 50 个');
     const subject = String(fd.get('subject') || '').slice(0, 500);
     const text = String(fd.get('text') || '');
@@ -258,7 +258,7 @@ async function api(request, env, url) {
       }
     }
 
-    // 发件人:自己、自己的别名和临时地址;管理员可以用本域名的任何地址
+    // 发件人：自己、自己的别名和临时地址；管理员可以用本域名的任何地址
     let fromAddr = user.address;
     const asBox = String(fd.get('from') || '').toLowerCase();
     if (asBox && asBox !== user.address) {
@@ -266,12 +266,12 @@ async function api(request, env, url) {
       if (!mine.includes(asBox) && !(user.is_admin && domainsOf(env).includes(asBox.split('@')[1]))) return err('不能用这个地址发信', 403);
       fromAddr = asBox;
     }
-    // 每天发信上限(管理员给账号设的,0 表示不限)
+    // 每天发信上限(管理员给账号设的，0 表示不限)
     const lim = await env.DB.prepare('SELECT send_limit FROM users WHERE id = ?').bind(user.id).first();
     if (lim?.send_limit) {
       const n = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM messages WHERE mailbox = ? AND folder = 'sent' AND date > ?`)
         .bind(user.address, Date.now() - 86400000).first()).n;
-      if (n >= lim.send_limit) return err(`已达到每天 ${lim.send_limit} 封的发信上限,请明天再发或联系管理员`, 429);
+      if (n >= lim.send_limit) return err(`已达到每天 ${lim.send_limit} 封的发信上限，请明天再发或联系管理员`, 429);
     }
     const fromUser = await env.DB.prepare('SELECT name FROM users WHERE address = ?').bind(fromAddr).first();
     const html = textToHtml(text);
@@ -284,10 +284,10 @@ async function api(request, env, url) {
     } catch (e) {
       console.error('send failed', e.code, e.message);
       await addLog(env, 'send_fail', fromAddr, all.join(', '), e.message);
-      return err(`发送失败:${e.code ? e.code + ' ' : ''}${e.message}`, 502);
+      return err(`发送失败：${e.code ? e.code + ' ' : ''}${e.message}`, 502);
     }
     await addLog(env, 'send', fromAddr, all.join(', '), subject);
-    // 从草稿发出的,删掉草稿
+    // 从草稿发出的，删掉草稿
     const draftId = String(fd.get('draft_id') || '');
     if (draftId) {
       const d = await env.DB.prepare(`SELECT * FROM messages WHERE id = ? AND folder = 'drafts' AND mailbox = ?`).bind(draftId, user.address).first();
@@ -335,11 +335,11 @@ async function api(request, env, url) {
   const ex = await extra(path, method, request, env, user, url);
   if (ex) return ex;
 
-  // ---- 管理员:发信设置 ----
+  // ---- 管理员：发信设置 ----
   if (path.startsWith('/admin/')) {
     if (!user.is_admin) return err('需要管理员', 403);
 
-    // 发信设置:Resend API Key 存在 settings 表;wrangler secret 里的 RESEND_API_KEY 优先
+    // 发信设置：Resend API Key 存在 settings 表；wrangler secret 里的 RESEND_API_KEY 优先
     if (path === '/admin/send' && method === 'GET') {
       const raw = env.__raw || {};
       const saved = await getSetting(env, 'resend_key');
@@ -351,8 +351,8 @@ async function api(request, env, url) {
       const { key } = await request.json().catch(() => ({}));
       const k = String(key || '').trim();
       if (!k) { await saveSetting(env, 'resend_key', null); return json({ ok: true, note: '已清除' }); }
-      if (!/^re_[A-Za-z0-9_-]{8,}$/.test(k)) return err('Key 格式不对,应该是 re_ 开头的一串字符');
-      // 用这个 Key 查一下 Resend 里的域名,顺便看域名有没有验证通过
+      if (!/^re_[A-Za-z0-9_-]{8,}$/.test(k)) return err('Key 格式不对，应该是 re_ 开头的一串字符');
+      // 用这个 Key 查一下 Resend 里的域名，顺便看域名有没有验证通过
       let note = '已保存';
       const r = await fetch('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${k}` } }).catch(() => null);
       const j = r ? await r.json().catch(() => ({})) : {};
@@ -360,11 +360,11 @@ async function api(request, env, url) {
         const list = j.data || [];
         const mine = domainsOf(env);
         const hit = list.find((d) => mine.includes(String(d.name).toLowerCase()));
-        if (!hit) note = `已保存。但 Resend 里还没有添加 ${mine.join('、')},先去 Resend 添加域名,不然发不出去`;
-        else if (hit.status !== 'verified') note = `已保存。Resend 里的 ${hit.name} 状态是「${hit.status}」,等它变成 verified 才能发信`;
-        else note = `已保存,${hit.name} 已在 Resend 验证通过,可以发信了`;
+        if (!hit) note = `已保存。但 Resend 里还没有添加 ${mine.join('、')},先去 Resend 添加域名，不然发不出去`;
+        else if (hit.status !== 'verified') note = `已保存。Resend 里的 ${hit.name} 状态是「${hit.status}」，等它变成 verified 才能发信`;
+        else note = `已保存，${hit.name} 已在 Resend 验证通过，可以发信了`;
       } else if (r && /restricted/i.test(j.name || j.message || '')) {
-        note = '已保存(这个 Key 只有发信权限,没法检查域名状态)';
+        note = '已保存(这个 Key 只有发信权限，没法检查域名状态)';
       } else if (r && r.status >= 400 && r.status < 500) {
         return err(`Resend 不认这个 Key:${j.message || r.status},请重新复制`);
       } else if (!r || r.status >= 500) {
@@ -399,7 +399,7 @@ async function cleanupTrash(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // Telegram 机器人回调:用 secret_token 头校验,不走登录
+    // Telegram 机器人回调：用 secret_token 头校验，不走登录
     if (url.pathname === '/tg/webhook' && request.method === 'POST') {
       try { return await tgWebhook(request, await withConfig(env)); } catch (e) { console.error(e); return new Response('ok'); }
     }
