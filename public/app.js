@@ -737,7 +737,7 @@ function clientPanel() {
 
 // ---------- 个人设置：分类标签页，和管理中心同一种结构 ----------
 const SETTINGS_TABS = [
-  ['account', '账户', 'user'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'autoreply'],
+  ['account', '账户', 'user'], ['security', '安全', 'shield'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'autoreply'],
   ['notify', '通知', 'bell'], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
@@ -761,12 +761,13 @@ async function pageSettings(tab = 'account') {
       <label>显示名称<input name="name" value="${esc(s.name)}" maxlength="80"></label>
       <label>签名<textarea name="signature" rows="4">${esc(s.signature)}</textarea></label>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form>
+    </form>`,
+    security: `
     <form class="panel" id="pwForm2">
       <h2>修改密码</h2>
       <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
       <label>新密码<input name="password" type="password" autocomplete="new-password" minlength="10" required placeholder="至少 10 位"></label>
-      <div class="actions"><span class="error" id="pwErr"></span><button class="primary" type="submit">修改密码</button></div>
+      <div class="actions"><button class="primary" type="submit">修改密码</button><span class="error" id="pwErr"></span></div>
     </form>`,
     forward: `
     <form class="panel" data-sec>
