@@ -553,15 +553,6 @@ function defaultChips() {
   return parts.join('') || '<span class="chip">退回</span>';
 }
 
-function TEMP_DEST_TEXT() {
-  if (!state.me.is_admin) return '收到的信进入你的收件箱';
-  const d = tempDefaults || {};
-  const parts = [];
-  if (d.box) parts.push(d.box === state.me.address ? '存进管理员邮箱' : `存进 ${esc(d.box)}`);
-  if (d.fwd) parts.push(`转发到 ${esc(d.fwd)}`);
-  return `收到的信${parts.join(',并') || '会被退回'}`;
-}
-
 function tempRows(items, showOwner, reload) {
   if (!items.length) return `<div class="empty small">${icon('mailclock')}<p>还没有临时地址</p></div>`;
   const now = Date.now();
@@ -644,7 +635,6 @@ async function pageTemp() {
   page.innerHTML = `${head('临时邮箱', `任意前缀 <code>@${esc(domain)}</code> 都能直接收信`,
 )}
   <div class="page-body">
-    <div class="dest-note">${icon('route')}<span>${TEMP_DEST_TEXT()}</span>${state.me.is_admin ? '<a data-go-settings>修改</a>' : ''}</div>
     <section class="panel">
       <div class="sec-head"><h2>${all ? '所有人的临时地址' : '我的临时地址'} <span class="count">${items.length}</span></h2>
         <div class="tools">
@@ -659,7 +649,6 @@ async function pageTemp() {
   $('#newTemp').onclick = () => newTempDialog(domain);
   if ($('#tempAll')) $('#tempAll').onchange = (e) => { state.tempAll = e.target.checked; pageTemp(); };
   $('#tempQ').oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.temp-rows tr', page).forEach((tr) => (tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none')); };
-  if ($('[data-go-settings]', page)) $('[data-go-settings]', page).onclick = () => openPage('settings/temp');
 }
 
 // ---------- 在 Foxmail / Outlook 里使用 ----------
