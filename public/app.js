@@ -3,7 +3,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-// 线条图标(24x24,描边)
+// 线条图标(24x24，描边)
 const ICONS = {
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   compose: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2 2 0 0 1 3 3l-9 9a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86Z"/>',
@@ -669,22 +669,24 @@ function clientPanel() {
   const me = state.me;
   const row = (k, v, copy = true) => `<tr><td class="muted nowrap">${k}</td><td><div class="addr-cell"><code>${esc(v)}</code>${copy ? `<button class="icon-btn xs" type="button" data-copy="${esc(v)}" title="复制">${icon('copy')}</button>` : ''}</div></td></tr>`;
   const pass = me.is_admin
-    ? 'Resend API Key(建议每人单独建一个 Sending access 的 Key)'
-    : 'Resend API Key,向管理员索取';
+    ? 'Resend API Key（建议每人单独建一个 Sending access 的 Key）'
+    : 'Resend API Key，向管理员索取';
   return `<section class="panel">
     <h2>在 Foxmail / Outlook 中使用</h2>
-    <h3>收信</h3>
-    <p class="muted sm">在「转发」里转到 QQ 邮箱或 Gmail,再在客户端里添加那个邮箱。</p>
-    <h3>发信</h3>
-    ${me.can_send ? '' : `<p class="hint">还没开通发信${me.is_admin ? `,<a data-goto-send>去开通</a>` : ''}</p>`}
+    <div class="subs">
+    <div class="sub"><h3>收信</h3>
+    <p class="hint">在「转发」里转到 QQ 邮箱或 Gmail，再在客户端里添加那个邮箱。</p></div>
+    <div class="sub"><h3>发信</h3>
+    ${me.can_send ? '' : `<p class="hint">还没开通发信${me.is_admin ? `，<a data-goto-send>去开通</a>` : ''}</p>`}
     <div class="table-wrap"><table class="tbl mini"><tbody>
       ${row('发件服务器（SMTP）', 'smtp.resend.com')}
       ${row('端口', '465')}
-      ${row('加密', 'SSL/TLS(或 587 + STARTTLS)', false)}
+      ${row('加密', 'SSL/TLS（或 587 + STARTTLS）', false)}
       ${row('用户名', 'resend')}
       <tr><td class="muted nowrap">密码</td><td class="sm">${pass}</td></tr>
       ${row('发件人地址', me.address)}
-    </tbody></table></div>
+    </tbody></table></div></div>
+    </div>
   </section>`;
 }
 
@@ -1015,7 +1017,7 @@ const ADMIN = {
         <div class="logo-edit">
           <span class="logo logo-lg ${b.logo ? 'has-img' : ''}">${b.logo ? `<img src="${esc(b.logo)}" alt="">` : DEFAULT_LOGO}</span>
           <div class="stack">
-            <p class="muted sm" style="margin:0">正方形 PNG / SVG,不超过 512KB</p>
+            <p class="hint">正方形 PNG / SVG，不超过 512KB</p>
             <div class="tools">
               <label class="file-btn bordered">${icon('upload')}上传图片<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
               ${b.logo ? '<button type="button" id="logoDel">恢复默认</button>' : ''}
@@ -1047,7 +1049,7 @@ const ADMIN = {
   async send(el) {
     const r = await api('/admin/send');
     const status = {
-      secret: [badge('ok', '已开通'), `用的是 Worker 机密里的 Key(…${esc(r.tail)}),这里改不了`],
+      secret: [badge('ok', '已开通'), `用的是 Worker 机密里的 Key（…${esc(r.tail)}），这里改不了`],
       settings: [badge('ok', '已开通'), `Resend Key 结尾 …${esc(r.tail)}`],
       cloudflare: [badge('warn', 'Cloudflare 发信'), '需要 Workers 付费版。填了 Resend Key 会改用 Resend'],
     }[r.source] || [badge('neutral', '未开通'), '填一个 Resend API Key 就能发信'];
@@ -1061,7 +1063,7 @@ const ADMIN = {
       </form>
       <ol class="steps">
         <li>在 <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> 添加并验证域名 <code>${esc((state.me.domains || [])[0] || '')}</code></li>
-        <li>创建 API Key,粘贴到上面</li>
+        <li>创建 API Key，粘贴到上面</li>
       </ol>
     </section></div>`;
     const save = async (key) => {
@@ -1077,13 +1079,13 @@ const ADMIN = {
       <h2>Telegram 通知</h2>
       <p class="status-line">${r.bot ? `${badge('ok', '已连接')}<span class="muted">机器人 @${esc(r.bot)},${r.bound} 人已绑定</span>` : `${badge('neutral', '未设置')}<span class="muted">设置后，每个人可以在「设置 → 通知」绑定自己的 Telegram</span>`}</p>
       <form id="tgForm" class="inline-form">
-        <input name="token" type="password" placeholder="${r.bot ? '换一个机器人 Token' : '机器人 Token,如 123456789:AAH…'}" autocomplete="off">
+        <input name="token" type="password" placeholder="${r.bot ? '换一个机器人 Token' : '机器人 Token，如 123456789:AAH…'}" autocomplete="off">
         <button class="primary" type="submit">保存</button>
         ${r.bot ? '<button type="button" id="tgClear">断开</button>' : ''}
       </form>
       <ol class="steps">
         <li>在 Telegram 打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>,发送 <code>/newbot</code>,按提示给机器人起名</li>
-        <li>复制它回复的 Token,粘贴到上面保存</li>
+        <li>复制它回复的 Token，粘贴到上面保存</li>
       </ol>
     </section></div>`;
     const save = async (token) => {

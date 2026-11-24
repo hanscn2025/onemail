@@ -247,7 +247,7 @@ async function api(request, env, url) {
       attachments.push({ filename: f.name || 'file', type: f.type || 'application/octet-stream', bytes: new Uint8Array(await f.arrayBuffer()) });
     }
 
-    // 回复时带上原信的 Message-ID,方便对方客户端归到同一会话
+    // 回复时带上原信的 Message-ID，方便对方客户端归到同一会话
     let inReplyTo = null, references = null;
     const replyId = String(fd.get('reply_to_id') || '');
     if (replyId) {
@@ -368,7 +368,7 @@ async function api(request, env, url) {
       } else if (r && r.status >= 400 && r.status < 500) {
         return err(`Resend 不认这个 Key:${j.message || r.status},请重新复制`);
       } else if (!r || r.status >= 500) {
-        note = '已保存(暂时连不上 Resend,没检查 Key)';
+        note = '已保存（暂时连不上 Resend，没检查 Key）';
       }
       await saveSetting(env, 'resend_key', k);
       return json({ ok: true, note });

@@ -170,7 +170,7 @@ export async function extra(path, method, request, env, user, url) {
     const address = `${local}@${domain}`;
     if (await taken(env, address)) return err('这个地址已经被占用了，换一个');
     const days = Number(b.days) || 0;
-    // 去向不在这里设：管理员的临时地址跟随全局设置(设置 → 临时邮箱收件地址),普通账号的进自己邮箱
+    // 去向不在这里设：管理员的临时地址跟随全局设置(设置 → 临时邮箱收件地址)，普通账号的进自己邮箱
     await env.DB.prepare(
       `INSERT INTO addresses (address, kind, owner, auto, note, expires_at, created_at) VALUES (?, 'temp', ?, ?, ?, ?, ?)`
     ).bind(address, user.address, user.is_admin ? 1 : 0, clean(b.note, 100), days ? Date.now() + days * DAY : 0, Date.now()).run();
@@ -434,7 +434,7 @@ export async function extra(path, method, request, env, user, url) {
   if (path === '/admin/routing' && method === 'POST') {
     const b = await body(request);
     if ('catch_all' in b) {
-      if (env.CATCH_ALL_LOCKED) return err('兜底邮箱写在配置文件里(CATCH_ALL),这里改不了');
+      if (env.CATCH_ALL_LOCKED) return err('兜底邮箱写在配置文件里（CATCH_ALL），这里改不了');
       const box = lower(b.catch_all);
       if (box && !(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(box).first())) return err('兜底邮箱必须是已有的账号');
       await saveSetting(env, 'catch_all', box || null);

@@ -577,37 +577,59 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .file-btn.bordered { border: 1px solid var(--line); }
 .panel label.file-btn { display: inline-flex; gap: 6px; }
 
-/* ---------- 页面分区:白底平铺,分区之间用细线隔开,字号和间距放宽 ---------- */
+/* ---------- 页面间距规则(所有页面同一套) ----------
+   页头:上 28,标题到标签栏 16
+   内容区:标签栏(或页头)下方 32 开始;左边和标题对齐
+   分区:之间 32 + 细线 + 32;分区内 标题→内容 20,字段之间 20,字段名→输入框 8,按钮上方多 4
+   小节(分区里的二级标题):小节之间 24,小标题→内容 8
+   宽度:表单类内容最宽 720,表格类铺满 */
 .page-head { padding: 28px 32px 16px; }
-.page-body { padding: 0 32px 48px; align-content: start; }
-.tabs + .page-body { padding-top: 4px; }
-.page-body.narrow, .narrow-col { max-width: 880px; }
-.panel label { gap: 8px; }
-.panel { padding: 28px 0; gap: 20px; }
+.page-body { padding: 16px 32px 48px; align-content: start; }
+.tabs + .page-body { padding-top: 32px; }
+.narrow-col { max-width: 720px; }
+.page-body.narrow { max-width: 784px; } /* 720 + 左右各 32 */
+.panel { padding: 32px 0; gap: 20px; }
+.panel:first-child { padding-top: 0; }
 .panel h2 { font-size: 18px; }
-.panel label, .field-title { font-size: 14px; color: var(--text); }
+.panel h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.panel .sub { display: grid; gap: 8px; }
+.panel .subs { display: grid; gap: 24px; }
+.panel label, .field-title { gap: 8px; font-size: 14px; color: var(--text); }
 .panel input:not([type=checkbox]):not([type=radio]), .panel select { height: 36px; padding: 0 12px; }
 .panel textarea { padding: 8px 12px; }
 .panel .addr-input input { height: 34px; }
+.panel .actions { margin-top: 4px; }
 .panel .actions button, .panel .inline-form button { height: 36px; padding: 0 16px; }
+.panel .sec-head .tools button { height: 36px; }
 .panel input[type=checkbox], .panel input[type=radio] { width: 16px; height: 16px; flex: none; }
 .check { font-weight: 400 !important; font-size: 14px; color: var(--text); }
-.field { gap: 10px; }
+.field { gap: 8px; }
 .choice { gap: 16px; }
-.radio-card { padding: 20px; border-radius: 8px; min-height: 92px; }
-.radio-card > span { gap: 6px; }
-.radio-card strong { font-size: 16px; }
+.radio-card { padding: 16px 20px; border-radius: 8px; }
+.radio-card > span { gap: 4px; }
+.radio-card strong { font-size: 15px; }
 .radio-card .muted.sm { font-size: 13px; line-height: 1.6; }
 .radio-card input { margin-top: 4px !important; }
 .status-line, .hint, .steps { font-size: 14px; }
-.tile { padding: 20px; }
-.alert { font-size: 14px; }
+.panel .tbl.mini td { padding: 8px 12px 8px 0; }
+.logo-edit .stack { gap: 12px; }
+/* 概览:提醒 → 16 → 数字块 → 32 → 图表 */
+.alert { margin: 0 0 16px; font-size: 14px; }
+.alert + .alert { margin-top: -8px; }
+.tiles { padding-top: 0; gap: 16px; }
+.tile { padding: 20px; gap: 4px; }
+.two { margin-top: 32px; gap: 48px; }
+.two .panel { padding: 0; }
+@media (max-width: 1100px) { .two { gap: 32px; } }
 @media (max-width: 760px) {
-  .page-head { padding: 18px 16px 8px; }
-  .page-body { padding: 0 16px 32px; }
-  .panel { padding: 20px 0; }
+  .page-head { padding: 20px 16px 12px; }
+  .page-body { padding: 12px 16px 32px; }
+  .tabs + .page-body { padding-top: 24px; }
+  .panel { padding: 24px 0; }
+  .panel:first-child { padding-top: 0; }
+  .two .panel { padding: 0; }
+  .two { margin-top: 24px; }
   .choice { grid-template-columns: 1fr; }
-  .radio-card { min-height: 0; padding: 16px; }
 }
 .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 @media (max-width: 1100px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -617,6 +639,8 @@ dialog { padding: 24px 28px; }
 .dlg-head strong { font-size: 18px; }
 .dlg-head { margin-bottom: 20px; }
 #editBody { gap: 20px; }
+#editBody .form-grid { gap: 20px 16px; }
+#editForm .dlg-foot { margin-top: 24px; }
 #editBody label { gap: 8px; font-size: 14px; color: var(--text); }
 #editBody input:not([type=checkbox]):not([type=radio]), #editBody select { height: 36px; padding: 0 12px; }
 #editBody input[type=checkbox], #editBody input[type=radio] { width: 16px; height: 16px; flex: none; }

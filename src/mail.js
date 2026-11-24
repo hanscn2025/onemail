@@ -26,7 +26,7 @@ const domainsOf = (env) => (env.DOMAINS || '').split(',').map((s) => s.trim().to
 const isLocal = (env, a) => domainsOf(env).includes(String(a).split('@')[1]);
 
 // 决定一封信去哪：存进哪些邮箱、转发到哪些外部地址
-// 返回 { boxes: Set, forwards: Map(外部地址 → 'cf'|'send'), reject: string|null, via: 'user'|'temp'|'alias'|'group'|'catchall' }
+// 返回 { boxes: Set, forwards: Map（外部地址 → 'cf'|'send'）, reject: string|null, via: 'user'|'temp'|'alias'|'group'|'catchall' }
 export async function route(env, rcpt) {
   const out = { boxes: new Set(), forwards: new Map(), reject: null, via: '' };
   const user = await env.DB.prepare('SELECT address, disabled FROM users WHERE address = ?').bind(rcpt).first();
@@ -235,7 +235,7 @@ function b64(bytes) {
   return btoa(s);
 }
 
-// 发信：设了 RESEND_API_KEY 走 Resend,否则走 Cloudflare Email Sending
+// 发信：设了 RESEND_API_KEY 走 Resend，否则走 Cloudflare Email Sending
 // m: { from:{email,name}, to[], cc[], bcc[], subject, text, html, inReplyTo, references, attachments:[{filename,type,bytes}] }
 export async function sendOut(env, m) {
   const headers = {};
