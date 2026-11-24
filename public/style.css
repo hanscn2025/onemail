@@ -82,6 +82,8 @@ hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
 code { font-family: var(--mono); font-size: 12.5px; }
 .spacer { flex: 1; }
 .mobile-only { display: none; }
+/* 电脑上设置入口在右上角齿轮;手机上齿轮收起,侧栏里才显示「设置」 */
+@media (min-width: 721px) { #settingsLink { display: none; } }
 
 .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ic.sm { width: 14px; height: 14px; }

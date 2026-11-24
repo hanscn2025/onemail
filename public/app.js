@@ -487,7 +487,7 @@ function editDialog(title, fields, onSave, saveText = '保存') {
   if (first) first.focus();
 }
 
-const FWD_HINT = '外部邮箱要先在 Cloudflare 后台「电子邮件 → 电子邮件路由 → 目标地址」里添加并点验证邮件,转发才会成功。';
+const FWD_HINT = '需先在 Cloudflare「电子邮件路由 → 目标地址」中验证该邮箱。';
 
 // ---------- 临时邮箱收件地址(设置页和临时邮箱页共用) ----------
 // r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
@@ -495,18 +495,18 @@ function tempTargetPanel(r) {
   const custom = !!r.catch_all_fwd;
   const box = r.catch_all || state.me.address;
   return `<form class="panel" data-target>
-    <div class="sec-head"><h2>临时邮箱收件地址 <span class="muted sm">任意前缀@${esc((state.me.domains || [])[0] || '')} 收到的信送到哪</span></h2></div>
+    <div class="sec-head"><h2>临时邮箱收件地址</h2></div>
     <div class="choice">
       <label class="radio-card"><input type="radio" name="mode" value="admin" ${custom ? '' : 'checked'}>
-        <span><strong>管理员邮箱</strong><span class="muted sm">默认。信存进 ${esc(box)},登录这里查看</span></span></label>
+        <span><strong>管理员邮箱</strong><span class="muted sm">${esc(box)}</span></span></label>
       <label class="radio-card"><input type="radio" name="mode" value="custom" ${custom ? 'checked' : ''}>
-        <span><strong>自定义邮箱</strong><span class="muted sm">送到你的 Gmail、QQ 邮箱等,在那边查看</span></span></label>
+        <span><strong>外部邮箱</strong><span class="muted sm">Gmail、QQ 邮箱等</span></span></label>
     </div>
     <div data-custom class="stack ${custom ? '' : 'hidden'}">
       <label>收件邮箱<input name="fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="例如 you@gmail.com"></label>
       <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}>
-        管理员邮箱里也保留一份<span class="muted sm">(方便用临时地址回信${r.locked ? ';这一项写在部署配置里,改不了' : ''})</span></label>
-      <div class="hint"><strong>第一次用要验证这个邮箱:</strong>Cloudflare 后台 → 你的域名 → 电子邮件 → 电子邮件路由 → 目标地址 → 添加地址,填上面的邮箱,然后去那个邮箱点验证链接。验证前信转不过去,失败会记在管理后台的记录里。</div>
+        管理员邮箱里也保留一份</label>
+      <p class="hint">${FWD_HINT}</p>
     </div>
     <div class="actions"><button class="primary" type="submit">保存</button></div>
   </form>`;
@@ -543,17 +543,16 @@ function defaultChips() {
 }
 
 function TEMP_DEST_TEXT() {
-  if (!state.me.is_admin) return '临时地址收到的信进你的邮箱;要转发到外部邮箱,请联系管理员。';
+  if (!state.me.is_admin) return '收到的信进入你的收件箱';
   const d = tempDefaults || {};
   const parts = [];
   if (d.box) parts.push(d.box === state.me.address ? '存进管理员邮箱' : `存进 ${esc(d.box)}`);
   if (d.fwd) parts.push(`转发到 ${esc(d.fwd)}`);
-  return `收到的信现在会${parts.join(',同时') || '被退回'}。这是全局设置,在「设置 → 临时邮箱收件地址」统一修改。`;
+  return `收到的信${parts.join(',并') || '会被退回'}`;
 }
-const TEMP_DEST_NOTE = () => `<p class="hint">${TEMP_DEST_TEXT()}</p>`;
 
 function tempRows(items, showOwner, reload) {
-  if (!items.length) return `<div class="empty small">${icon('shuffle')}<p>还没有临时地址。随便写一个前缀去注册网站,收到第一封信后它就会出现在这里</p></div>`;
+  if (!items.length) return `<div class="empty small">${icon('shuffle')}<p>还没有临时地址</p></div>`;
   const now = Date.now();
   const rows = items.map((a) => {
     const expired = a.expires_at && a.expires_at < now;
@@ -563,7 +562,7 @@ function tempRows(items, showOwner, reload) {
     return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to).toLowerCase())}">
       <td><div class="addr-cell"><code>${esc(a.address)}</code><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
-      <td><div class="chips">${to}</div>${a.auto ? '<div class="muted sm">按全局设置</div>' : ''}</td>
+      <td><div class="chips">${to}</div>${a.auto ? '' : ''}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
       <td class="acts">
@@ -590,15 +589,14 @@ function wireTemp(items, reload) {
     try { await api(`/temp/${encodeURIComponent(b.dataset.ttoggle)}`, { method: 'PATCH', json: { enabled: b.dataset.on !== '1' } }); reload(); } catch (x) { toast(x.message); }
   }));
   $$('[data-tdel]', page).forEach((b) => (b.onclick = async () => {
-    if (!confirm(`删除 ${b.dataset.tdel}?之后再有信发到这个地址,它会按默认规则重新出现。想让它收不到信请用「停用」。已收到的信不会删。`)) return;
+    if (!confirm(`删除 ${b.dataset.tdel}?已收到的信会保留。`)) return;
     try { await api(`/temp/${encodeURIComponent(b.dataset.tdel)}`, { method: 'DELETE' }); reload(); } catch (x) { toast(x.message); }
   }));
   $$('[data-tedit]', page).forEach((b) => (b.onclick = () => {
     const a = items.find((x) => x.address === b.dataset.tedit);
     editDialog(`编辑 ${a.address}`, `
       <label>备注<input name="note" value="${esc(a.note)}" placeholder="例如:哪个网站用的"></label>
-      <label>有效期<select name="days"><option value="keep">不改(${a.expires_at ? fmtDay(a.expires_at) + ' 到期' : '永久'})</option><option value="0">改成永久</option><option value="1">从现在起 1 天</option><option value="7">从现在起 7 天</option><option value="30">从现在起 30 天</option></select></label>
-      ${TEMP_DEST_NOTE()}`, async (f) => {
+      <label>有效期<select name="days"><option value="keep">不改(${a.expires_at ? fmtDay(a.expires_at) + ' 到期' : '永久'})</option><option value="0">改成永久</option><option value="1">从现在起 1 天</option><option value="7">从现在起 7 天</option><option value="30">从现在起 30 天</option></select></label>`, async (f) => {
       const j = { note: f.get('note') };
       if (f.get('days') !== 'keep') j.days = Number(f.get('days'));
       await api(`/temp/${encodeURIComponent(a.address)}`, { method: 'PATCH', json: j });
@@ -609,15 +607,13 @@ function wireTemp(items, reload) {
 
 function newTempDialog(domain) {
   editDialog('新建临时地址', `
-    <p class="muted sm" style="margin:0">不建也能用:随便写一个前缀就能收信。只有想提前写好备注或设有效期时才需要在这里建。</p>
     <label>地址
       <div class="addr-input"><input name="local" placeholder="留空就随机生成" autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span>
       <button type="button" class="icon-btn" data-rand title="随机生成一个">${icon('dice')}</button></div></label>
     <div class="form-grid">
       <label>备注<input name="note" placeholder="例如:某购物网站" maxlength="100"></label>
       <label>有效期<select name="days"><option value="0">永久</option><option value="1">1 天</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
-    </div>
-    ${TEMP_DEST_NOTE()}`, async (f) => {
+    </div>`, async (f) => {
     const r = await api('/temp', { method: 'POST', json: { local: f.get('local'), note: f.get('note'), days: Number(f.get('days')) } });
     state.me = await api('/me');
     await pageTemp();
@@ -634,15 +630,15 @@ async function pageTemp() {
   const { items, domain, defaults } = await api('/temp' + (all ? '?all=1' : ''));
   tempDefaults = defaults || null;
   const d = defaults;
-  page.innerHTML = `${head('临时邮箱', `随便写一个前缀 <code>任意名字@${esc(domain)}</code> 就能收信,不用提前建。收到第一封信后,地址会自动出现在下面。`,
+  page.innerHTML = `${head('临时邮箱', `任意前缀 <code>@${esc(domain)}</code> 都能直接收信`,
 )}
   <div class="page-body">
-    <div class="dest-note">${icon('route')}<span>${TEMP_DEST_TEXT()}</span>${state.me.is_admin ? '<a data-go-settings>去设置修改</a>' : ''}</div>
+    <div class="dest-note">${icon('route')}<span>${TEMP_DEST_TEXT()}</span>${state.me.is_admin ? '<a data-go-settings>修改</a>' : ''}</div>
     <section class="panel">
       <div class="sec-head"><h2>${all ? '所有人的临时地址' : '我的临时地址'} <span class="count">${items.length}</span></h2>
         <div class="tools">
           <div class="search sm-search">${icon('search')}<input id="tempQ" type="search" placeholder="搜索地址或备注"></div>
-          <button class="primary" id="newTemp">${icon('plus')}新建临时地址</button>
+          <button class="primary" id="newTemp">${icon('plus')}新建</button>
           ${state.me.is_admin ? `<label class="check sm"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
         </div></div>
       ${tempRows(items, all, pageTemp)}
@@ -661,32 +657,22 @@ function clientPanel() {
   const me = state.me;
   const row = (k, v, copy = true) => `<tr><td class="muted nowrap">${k}</td><td><div class="addr-cell"><code>${esc(v)}</code>${copy ? `<button class="icon-btn xs" type="button" data-copy="${esc(v)}" title="复制">${icon('copy')}</button>` : ''}</div></td></tr>`;
   const pass = me.is_admin
-    ? `在 Resend 后台 API Keys 里新建一个 Key 当密码。建议每个人、每台设备单独建一个,权限选 Sending access、域名只选 <code>${esc((me.domains || [])[0] || '')}</code>,丢了可以单独删掉`
-    : '找管理员要一个 Resend API Key 当密码(re_ 开头)';
+    ? 'Resend API Key(建议每人单独建一个 Sending access 的 Key)'
+    : 'Resend API Key,向管理员索取';
   return `<section class="panel">
-    <h2>在 Foxmail / Outlook 里使用 <span class="muted sm">用电脑、手机上的邮件客户端收发这个邮箱</span></h2>
-    <p class="hint">这个邮箱跑在 Cloudflare 上,没有 IMAP/POP3 收信服务,客户端不能直接登录。办法是:<strong>收信</strong>转发到 QQ、Gmail 等外部邮箱,在客户端里添加那个邮箱;<strong>发信</strong>在客户端里加一个 SMTP 发件服务器,用 ${esc(me.address)} 的身份发出去。</p>
-    <h3>第 1 步 · 收信</h3>
-    <ol class="steps">
-      <li>在上面「转发到外部邮箱」填你的 QQ 邮箱或 Gmail${me.fwd_to ? `(现在转发到 <code>${esc(me.fwd_to)}</code>)` : ''}。想网页版里也留一份,就勾上「转发后在这里也保留一份」。</li>
-      <li>在 Foxmail / Outlook 里按平常的方法添加那个 QQ 或 Gmail 账号,发到 ${esc(me.address)} 的信就会出现在里面。</li>
-    </ol>
-    <h3>第 2 步 · 用 ${esc(me.address)} 发信</h3>
-    ${me.can_send ? '' : `<p class="hint">系统还没开通发信${me.is_admin ? `,先去 <a data-goto-send>管理后台 → 发信</a> 填 Resend Key` : ',请联系管理员'}。</p>`}
+    <h2>Foxmail / Outlook</h2>
+    <h3>收信</h3>
+    <p class="muted sm">用上面的「转发」转到 QQ 邮箱或 Gmail,在客户端里添加那个邮箱。</p>
+    <h3>发信</h3>
+    ${me.can_send ? '' : `<p class="hint">还没开通发信${me.is_admin ? `,<a data-goto-send>去开通</a>` : ''}</p>`}
     <div class="table-wrap"><table class="tbl mini"><tbody>
       ${row('发件服务器(SMTP)', 'smtp.resend.com')}
       ${row('端口', '465')}
-      ${row('加密方式', 'SSL/TLS', false)}
+      ${row('加密', 'SSL/TLS(或 587 + STARTTLS)', false)}
       ${row('用户名', 'resend')}
       <tr><td class="muted nowrap">密码</td><td class="sm">${pass}</td></tr>
       ${row('发件人地址', me.address)}
     </tbody></table></div>
-    <ol class="steps">
-      <li><strong>Foxmail</strong>:在收 QQ/Gmail 的那个账号里,设置 → 账号 → 发件人身份(或「其他邮箱」)新增 ${esc(me.address)},发件服务器填上面的参数。写信时在「发件人」里选它。</li>
-      <li><strong>Outlook</strong>:文件 → 账户设置 → 新建,选「手动设置 → POP 或 IMAP」,电子邮件填 ${esc(me.address)},接收服务器可以填 QQ/Gmail 的,发送服务器填上面的参数。</li>
-      <li>465 端口连不上时,换 587,加密方式选 STARTTLS。</li>
-    </ol>
-    <p class="hint">注意:从客户端发出的信不经过这个网页,所以不会出现在这里的「已发送」里,也不计入每天的发信上限。</p>
   </section>`;
 }
 
@@ -695,7 +681,7 @@ async function pageSettings() {
   const s = await api('/settings');
   const route = state.me.is_admin ? await api('/admin/routing') : null;
   const pct = s.quota_mb ? Math.min(100, (s.used / (s.quota_mb * 1048576)) * 100) : 0;
-  page.innerHTML = `${head('设置', esc(state.me.address))}
+  page.innerHTML = `${head('设置')}
   <div class="page-body narrow">
     <section class="panel">
       <h2>用量</h2>
@@ -708,21 +694,21 @@ async function pageSettings() {
     ${route ? tempTargetPanel(route) : ''}
     <form class="panel" data-sec>
       <h2>个人资料</h2>
-      <label>显示名称<span class="muted sm">发信时对方看到的名字</span><input name="name" value="${esc(s.name)}" maxlength="80"></label>
-      <label>签名<span class="muted sm">写信、回复时自动加在正文后面</span><textarea name="signature" rows="4">${esc(s.signature)}</textarea></label>
+      <label>显示名称<input name="name" value="${esc(s.name)}" maxlength="80"></label>
+      <label>签名<textarea name="signature" rows="4">${esc(s.signature)}</textarea></label>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>
     <form class="panel" data-sec>
       <h2>自动回复</h2>
-      <label class="switch"><input type="checkbox" name="ar_on" ${s.ar_on ? 'checked' : ''}><span class="track"></span>开启自动回复<span class="muted sm">同一个人 4 天内只回一次;群发、通知类邮件不回</span></label>
+      <label class="switch"><input type="checkbox" name="ar_on" ${s.ar_on ? 'checked' : ''}><span class="track"></span>开启自动回复</label>
       <label>主题<input name="ar_subject" value="${esc(s.ar_subject)}" placeholder="留空就用「自动回复:原主题」"></label>
       <label>内容<textarea name="ar_body" rows="4" placeholder="你好,我这几天休假,回来后会尽快回复你。">${esc(s.ar_body)}</textarea></label>
-      <label>截止日期<span class="muted sm">到这天结束后自动关闭,留空表示一直开着</span><input name="ar_until" type="date" value="${s.ar_until ? fmtDay(s.ar_until - 1) : ''}"></label>
+      <label>截止日期<input name="ar_until" type="date" value="${s.ar_until ? fmtDay(s.ar_until - 1) : ''}"></label>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>
     <form class="panel" data-sec>
-      <h2>转发到外部邮箱</h2>
-      <label>转发地址<span class="muted sm">发给 ${esc(state.me.address)} 的信同时转发到这里,留空表示不转发</span><input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
+      <h2>转发</h2>
+      <label>转发到<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
       <label class="check"><input type="checkbox" name="fwd_keep" ${s.fwd_keep ? 'checked' : ''}> 转发后在这里也保留一份</label>
       <p class="hint">${FWD_HINT}</p>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
@@ -731,7 +717,7 @@ async function pageSettings() {
     <form class="panel" id="pwForm2">
       <h2>修改密码</h2>
       <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
-      <label>新密码<span class="muted sm">至少 10 位</span><input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+      <label>新密码<input name="password" type="password" autocomplete="new-password" minlength="10" required placeholder="至少 10 位"></label>
       <div class="actions"><span class="error" id="pwErr"></span><button class="primary" type="submit">修改密码</button></div>
     </form>
   </div>`;
@@ -768,7 +754,7 @@ const ADMIN_TABS = [
 async function pageAdmin(tab = 'overview') {
   if (!state.me.is_admin) return;
   if (!ADMIN_TABS.some((t) => t[0] === tab)) tab = 'overview';
-  page.innerHTML = `${head('管理后台', esc((state.me.domains || []).join(', ')))}
+  page.innerHTML = `${head('管理后台')}
     <div class="tabs" role="tablist">${ADMIN_TABS.map(([k, t, ic]) => `<a data-tab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
     <div class="page-body" id="tabBody"><div class="empty small"><p>加载中…</p></div></div>`;
   wire();
@@ -843,12 +829,12 @@ const ADMIN = {
     const userFields = (u = {}) => `
       ${u.id ? '' : `<label>地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div></label>`}
       <label>显示名称<input name="name" value="${esc(u.name || '')}" maxlength="80"></label>
-      ${u.id ? '' : '<label>密码<span class="muted sm">至少 10 位</span><input name="password" type="password" minlength="10" required autocomplete="new-password"></label>'}
+      ${u.id ? '' : '<label>密码<input name="password" type="password" minlength="10" required autocomplete="new-password" placeholder="至少 10 位"></label>'}
       <div class="form-grid">
-        <label>存储上限(MB)<span class="muted sm">0 表示不限</span><input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
-        <label>每天最多发信<span class="muted sm">0 表示不限</span><input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>
+        <label>存储上限(MB,0 为不限)<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
+        <label>每天发信上限(0 为不限)<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>
       </div>
-      <label>转发到外部邮箱<span class="muted sm">这个账号收到的信同时转发到这里,留空表示不转发。外部邮箱要先在 Cloudflare「电子邮件路由 → 目标地址」验证</span><input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
+      <label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
       ${u.id ? `<label class="check"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}> 停用这个账号(不能登录,发来的信会被退回)</label>` : ''}`;
     $('#newUser').onclick = () => editDialog('新建账号', userFields(), async (f) => {
@@ -870,7 +856,7 @@ const ADMIN = {
     }));
     $$('[data-upw]', el).forEach((b) => (b.onclick = () => {
       const u = items.find((x) => String(x.id) === b.dataset.upw);
-      editDialog(`重设 ${u.address} 的密码`, `<label>新密码<span class="muted sm">至少 10 位。重设后这个账号在所有设备都要重新登录</span>
+      editDialog(`重设 ${u.address} 的密码`, `<label>新密码
         <div class="addr-input"><input name="password" minlength="10" required autocomplete="new-password" value="${genPassword()}"><button type="button" class="icon-btn" data-gen title="换一个">${icon('dice')}</button></div></label>`, async (f) => {
         await api(`/admin/users/${u.id}/password`, { method: 'POST', json: { password: f.get('password') } });
         copyText(f.get('password')); toast('密码已重设,新密码已复制');
@@ -894,7 +880,6 @@ const ADMIN = {
     const domain = (state.me.domains || [])[0] || '';
     el.innerHTML = `<section class="panel">
       <div class="sec-head"><h2>别名和群组 <span class="count">${items.length}</span></h2><button class="primary" id="newAddr">${icon('plus')}新建</button></div>
-      <p class="muted sm">别名:一个账号的另一个地址,比如 sales@ 的信进 alice 的邮箱,alice 也能用 sales@ 发信。群组:发给 team@ 的信送到每个成员,成员可以是本域名账号或外部邮箱。</p>
       ${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th></th></tr></thead><tbody>
       ${items.map((a) => `<tr>
         <td><div class="addr-cell"><code>${esc(a.address)}</code><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
@@ -916,7 +901,7 @@ const ADMIN = {
         <div class="seg"><label><input type="radio" name="kind" value="alias" checked><span>别名</span></label><label><input type="radio" name="kind" value="group"><span>群组</span></label></div>
         <label>地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例如 sales"><span class="suffix">@${esc(domain)}</span></div></label>
         <label data-k="alias">属于哪个账号<select name="owner">${userOpts()}</select></label>
-        <label data-k="group" class="hidden">成员<span class="muted sm">每行一个,可以是本域名账号或外部邮箱(外部邮箱要先在 Cloudflare 验证)</span><textarea name="members" rows="4" placeholder="alice@${esc(domain)}&#10;bob@${esc(domain)}"></textarea></label>
+        <label data-k="group" class="hidden">成员(每行一个)<textarea name="members" rows="4" placeholder="alice@${esc(domain)}&#10;bob@${esc(domain)}"></textarea></label>
         <label>备注<input name="note" maxlength="100"></label>`, async (f) => {
         const kind = f.get('kind');
         await api('/admin/addresses', { method: 'POST', json: { kind, local: f.get('local'), owner: f.get('owner'), members: f.get('members'), note: f.get('note') } });
@@ -927,7 +912,7 @@ const ADMIN = {
     $$('[data-aedit]', el).forEach((b) => (b.onclick = () => {
       const a = items.find((x) => x.address === b.dataset.aedit);
       editDialog(`编辑 ${a.address}`, `${a.kind === 'group'
-        ? `<label>成员<span class="muted sm">每行一个</span><textarea name="members" rows="5">${esc(a.members.join('\n'))}</textarea></label>`
+        ? `<label>成员(每行一个)<textarea name="members" rows="5">${esc(a.members.join('\n'))}</textarea></label>`
         : `<label>属于哪个账号<select name="owner">${userOpts(a.owner)}</select></label>`}
         <label>备注<input name="note" value="${esc(a.note)}" maxlength="100"></label>`, async (f) => {
         const j = { note: f.get('note') };
@@ -955,7 +940,7 @@ const ADMIN = {
     el.innerHTML = `<div class="narrow-col">
       <form class="panel" id="brandName">
         <h2>系统名称</h2>
-        <label>名称<span class="muted sm">显示在左上角、登录页和浏览器标签上,比如公司名「某某科技邮箱」</span>
+        <label>名称
           <input name="name" value="${esc(b.name)}" maxlength="40" placeholder="OneMail"></label>
         <div class="actions"><button class="primary" type="submit">保存</button></div>
       </form>
@@ -964,7 +949,7 @@ const ADMIN = {
         <div class="logo-edit">
           <span class="logo logo-lg ${b.logo ? 'has-img' : ''}">${b.logo ? `<img src="${esc(b.logo)}" alt="">` : DEFAULT_LOGO}</span>
           <div class="stack">
-            <p class="muted sm" style="margin:0">建议用正方形图片,256×256 像素左右,PNG 或 SVG,不超过 512KB。透明背景效果最好。</p>
+            <p class="muted sm" style="margin:0">正方形 PNG / SVG,不超过 512KB</p>
             <div class="tools">
               <label class="file-btn bordered">${icon('upload')}上传图片<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden></label>
               ${b.logo ? '<button type="button" id="logoDel">恢复默认</button>' : ''}
@@ -1009,9 +994,8 @@ const ADMIN = {
         ${r.source === 'settings' ? '<button type="button" id="resendClear2">清除</button>' : ''}
       </form>
       <ol class="steps">
-        <li>到 <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> 免费注册,在 Domains 里添加 <code>${esc((state.me.domains || [])[0] || '')}</code>,选自动配置 Cloudflare,等状态变成 Verified。</li>
-        <li>在 API Keys 里创建一个 Key(Sending access 就够),复制下来粘到上面。</li>
-        <li>免费额度每天 100 封、每月 3000 封,所有账号共用。可以在「账号」里给每个人设每天上限。</li>
+        <li>在 <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> 添加并验证域名 <code>${esc((state.me.domains || [])[0] || '')}</code></li>
+        <li>创建 API Key,粘贴到上面</li>
       </ol>
     </section></div>`;
     const save = async (key) => {
@@ -1032,7 +1016,7 @@ const ADMIN = {
         <td class="nowrap">${fmtDate(x.at, true)}</td><td>${badge(k[0], k[1])}</td><td>${esc(x.actor)}</td>
         <td>${esc(type === 'login' ? x.ip : x.target)}</td><td class="detail">${esc(x.detail)}</td></tr>`; }).join('')}
       </tbody></table></div>` : `<div class="empty small">${icon('list')}<p>没有记录</p></div>`}
-      <p class="muted sm">记录保留 90 天,最多显示最近 200 条。</p></section>`;
+      </section>`;
     $$('[name=lt]', el).forEach((r) => (r.onchange = () => ADMIN.logs(el, r.value, $('#logQ').value)));
     let t; $('#logQ').oninput = (e) => { clearTimeout(t); t = setTimeout(() => ADMIN.logs(el, type, e.target.value.trim()), 400); };
   },
@@ -1046,7 +1030,7 @@ function genPassword() {
 function batchDialog(domain, reload) {
   let results = [];
   editDialog('批量创建账号', `
-    <label>每行一个账号<span class="muted sm">格式:用户名[,密码][,显示名称]。不写密码会自动生成</span>
+    <label>每行一个:用户名,密码,显示名称(密码可留空)
     <textarea name="lines" rows="7" placeholder="alice&#10;bob,MyPassword123,Bob Li&#10;carol,,Carol"></textarea></label>
     <p class="muted sm" id="batchMsg"></p>
     <div class="table-wrap hidden" id="batchWrap"><table class="tbl mini"><thead><tr><th>地址</th><th>密码</th><th>结果</th></tr></thead><tbody id="batchRows"></tbody></table></div>
