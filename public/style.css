@@ -6,7 +6,7 @@
   --bg: #f6f8fc;          /* 页面底色、顶栏、侧栏 */
   --surface: #ffffff;     /* 内容卡片 */
   --raised: #ffffff;      /* 弹窗、菜单 */
-  --field: #e9eef6;       /* 顶部搜索框 */
+  --field: #eaf1fb;       /* 顶部搜索框 */
   --line: #e1e5ea;
   --line-soft: #edf0f4;
   --text: #1f1f1f;
@@ -21,9 +21,9 @@
   --nav-on: #d3e3fd;
   --hover: rgb(31 31 31 / .06);
   --row-read: #f2f6fc;
-  --sel: #d3e3fd;
+  --sel: #c2dbff;
   --danger: #d93025;
-  --star: #f4a300;
+  --star: #f4b400;
   --ok: #188038;
   --shadow-1: 0 1px 2px rgb(20 22 30 / .08), 0 1px 3px 1px rgb(20 22 30 / .05);
   --shadow-2: 0 4px 12px rgb(20 22 30 / .12), 0 1px 3px rgb(20 22 30 / .08);
@@ -224,6 +224,17 @@ button:disabled { opacity: .6; cursor: default; }
 .item:hover { box-shadow: inset 1px 0 0 var(--line), inset -1px 0 0 var(--line), 0 1px 2px 0 rgb(20 22 30 / .15); z-index: 1; }
 .item.sel { background: var(--sel); }
 .item-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.item .snip { padding-right: 28px; }
+/* 每封信右下角的星标:平时淡灰空心,加星后黄色实心 */
+.star-btn {
+  position: absolute; right: 8px; bottom: 6px; width: 32px; height: 32px; padding: 0; border: none; border-radius: 50%;
+  background: none; color: var(--muted); opacity: .55; display: inline-flex; align-items: center; justify-content: center;
+}
+.star-btn .ic { width: 18px; height: 18px; }
+.item:hover .star-btn { opacity: 1; }
+.star-btn:hover { background: var(--hover); color: var(--text); }
+.star-btn.on { opacity: 1; color: var(--star); }
+.star-btn.on .ic { fill: var(--star); }
 .item-top { display: flex; align-items: baseline; gap: 8px; }
 .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
 .when { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

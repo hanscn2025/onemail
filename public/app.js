@@ -223,14 +223,33 @@ function renderList() {
       return `<div class="item ${m.seen ? '' : 'unread'} ${state.cur?.id === m.id ? 'sel' : ''}" data-id="${m.id}">
         ${av}
         <div class="item-main">
-          <div class="item-top"><span class="who">${esc(who)}</span><span class="when">${m.has_attach ? icon('clip', 'sm') : ''}${m.starred ? icon('star', 'sm on') : ''}${fmtDate(m.date)}</span></div>
+          <div class="item-top"><span class="who">${esc(who)}</span><span class="when">${m.has_attach ? icon('clip', 'sm') : ''}${fmtDate(m.date)}</span></div>
           <div class="subj">${tag}${esc(m.subject || '(无主题)')}</div>
           <div class="snip">${esc(m.snippet)}</div>
-        </div></div>`;
+        </div>
+        ${state.folder === 'drafts' ? '' : `<button class="star-btn ${m.starred ? 'on' : ''}" data-star title="${m.starred ? '取消星标' : '加星标'}" aria-label="星标">${icon('star')}</button>`}</div>`;
     }).join('');
   }
   $('#moreBtn').classList.toggle('hidden', state.done);
   $$('.item', el).forEach((n) => (n.onclick = () => (state.folder === 'drafts' ? openDraft(n.dataset.id) : openMsg(n.dataset.id))));
+  $$('[data-star]', el).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); toggleStar(b.closest('.item').dataset.id); }));
+}
+
+// 列表里直接加星、取消星标,不用点开信
+async function toggleStar(id) {
+  const m = state.items.find((x) => String(x.id) === String(id));
+  if (!m) return;
+  const on = !m.starred;
+  try { await api(`/messages/${m.id}`, { method: 'PATCH', json: { starred: on } }); } catch (x) { toast(x.message); return; }
+  m.starred = on ? 1 : 0;
+  if (state.folder === 'starred' && !on) state.items = state.items.filter((x) => x !== m);
+  renderList();
+  if (state.cur && String(state.cur.id) === String(id)) {
+    state.cur.starred = m.starred;
+    const b = $('#reader [data-a="star"]');
+    if (b) { b.classList.toggle('starred', on); b.title = on ? '取消星标' : '加星标'; }
+  }
+  toast(on ? '已加星标' : '已取消星标');
 }
 
 // ---------- 读信 ----------
@@ -311,7 +330,7 @@ async function act(a) {
     if (a === 'back') return closeReader();
     if (a === 'images') return openMsg(m.id, true);
     if (a === 'reply' || a === 'replyall' || a === 'forward') return openCompose(a, m);
-    if (a === 'star') { await api(`/messages/${m.id}`, { method: 'PATCH', json: { starred: !m.starred } }); await loadList(); return openMsg(m.id); }
+    if (a === 'star') { await api(`/messages/${m.id}`, { method: 'PATCH', json: { starred: !m.starred } }); toast(m.starred ? '已取消星标' : '已加星标'); await loadList(); return openMsg(m.id); }
     if (a === 'unread') { await api(`/messages/${m.id}`, { method: 'PATCH', json: { seen: false } }); closeReader(); return loadList(); }
     if (a === 'trash') { await api(`/messages/${m.id}`, { method: 'PATCH', json: { folder: 'trash' } }); toast('已移到垃圾箱'); }
     if (a === 'restore') { await api(`/messages/${m.id}`, { method: 'PATCH', json: { folder: 'restore' } }); toast('已移回'); }
