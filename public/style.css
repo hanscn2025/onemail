@@ -704,7 +704,7 @@ dialog { padding: 24px; border-radius: 8px; }
 .app.paging .surface { background: var(--page); }
 
 .page { background: var(--page); padding: 24px 24px 40px; }
-.pg-col { display: grid; gap: 16px; align-content: start; min-width: 0; } /* 铺满内容区,只留固定边距;表单内容本身限宽 640 */
+.pg-col { display: grid; gap: 16px; align-content: start; min-width: 0; } /* 铺满内容区,只留固定边距;表单内容本身限宽 880 */
 .pg-stack { display: grid; gap: 16px; min-width: 0; }
 .pg-head { display: flex; align-items: center; gap: 12px; min-height: 36px; flex-wrap: wrap; }
 .pg-head .page-title { flex: 1; min-width: 200px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -751,7 +751,7 @@ dialog { padding: 24px; border-radius: 8px; }
 
 /* 表单块 */
 .pg-col .panel, .pg-col .panel:first-child, .pg-col .panel:last-child { padding: 24px; gap: 16px; }
-.pg-col .panel > :not(.actions):not(.table-wrap):not(h2):not(.sec-head):not(.usage) { max-width: 640px; }
+.pg-col .panel > :not(.actions):not(.table-wrap):not(h2):not(.sec-head):not(.usage) { max-width: 880px; }
 .pg-col .panel .actions { margin: 8px -24px -24px; padding: 16px 24px; border-top: 1px solid var(--line-soft); }
 .pg-col .panel h2 { margin: 0; }
 .pg-col .narrow-col { max-width: none; display: grid; gap: 16px; }
@@ -778,4 +778,4 @@ dialog { padding: 24px; border-radius: 8px; }
   .side { background: var(--surface); }
   .acts { margin-left: 0 !important; padding-top: 4px !important; }
 }
-.pg-col .usage { max-width: 640px; }
+.pg-col .usage { max-width: 880px; }
