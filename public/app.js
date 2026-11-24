@@ -154,7 +154,7 @@ async function boot() {
   }
   const h = location.hash.slice(1);
   if (['inbox', 'starred', 'sent', 'drafts', 'trash'].includes(h)) state.folder = h;
-  if (h === 'temp' || h === 'settings' || (h.startsWith('admin') && state.me.is_admin)) { openPage(h); return; }
+  if (h === 'temp' || h.startsWith('settings') || (h.startsWith('admin') && state.me.is_admin)) { openPage(h); return; }
   await loadList();
 }
 $('#boxSel').onchange = (e) => { state.box = e.target.value; state.rcpt = ''; closeReader(); loadList(); };
@@ -166,7 +166,7 @@ $$('#folders a').forEach((a) => (a.onclick = () => {
 }));
 let searchT;
 $('#search').addEventListener('input', (e) => { clearTimeout(searchT); searchT = setTimeout(() => { state.q = e.target.value.trim(); loadList(); }, 300); });
-$('#refreshBtn').onclick = () => loadList();
+$('#refreshBtn').onclick = () => { loadList(); toast('已刷新'); };
 $('#moreBtn').onclick = () => loadList(true);
 // 菜单按钮:手机上滑出侧栏,电脑上收起或展开侧栏
 $('#menuBtn').onclick = () => $('#app').classList.toggle(window.innerWidth <= 720 ? 'menu' : 'collapsed');
@@ -648,7 +648,7 @@ async function pageTemp() {
   $('#newTemp').onclick = () => newTempDialog(domain);
   if ($('#tempAll')) $('#tempAll').onchange = (e) => { state.tempAll = e.target.checked; pageTemp(); };
   $('#tempQ').oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.temp-rows tr', page).forEach((tr) => (tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none')); };
-  if ($('[data-go-settings]', page)) $('[data-go-settings]', page).onclick = () => openPage('settings');
+  if ($('[data-go-settings]', page)) $('[data-go-settings]', page).onclick = () => openPage('settings/temp');
 }
 
 // ---------- 在 Foxmail / Outlook 里使用 ----------
@@ -660,9 +660,9 @@ function clientPanel() {
     ? 'Resend API Key(建议每人单独建一个 Sending access 的 Key)'
     : 'Resend API Key,向管理员索取';
   return `<section class="panel">
-    <h2>Foxmail / Outlook</h2>
+    <h2>在 Foxmail / Outlook 中使用</h2>
     <h3>收信</h3>
-    <p class="muted sm">用上面的「转发」转到 QQ 邮箱或 Gmail,在客户端里添加那个邮箱。</p>
+    <p class="muted sm">在「转发」里转到 QQ 邮箱或 Gmail,再在客户端里添加那个邮箱。</p>
     <h3>发信</h3>
     ${me.can_send ? '' : `<p class="hint">还没开通发信${me.is_admin ? `,<a data-goto-send>去开通</a>` : ''}</p>`}
     <div class="table-wrap"><table class="tbl mini"><tbody>
@@ -676,13 +676,19 @@ function clientPanel() {
   </section>`;
 }
 
-// ---------- 个人设置 ----------
-async function pageSettings() {
+// ---------- 个人设置:分类标签页,和管理后台同一种结构 ----------
+const SETTINGS_TABS = [
+  ['account', '账户', 'users'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'reply'],
+  ['temp', '临时邮箱', 'shuffle', true], ['client', '客户端', 'at'],
+];
+async function pageSettings(tab = 'account') {
+  const tabs = SETTINGS_TABS.filter((t) => !t[3] || state.me.is_admin);
+  if (!tabs.some((t) => t[0] === tab)) tab = 'account';
   const s = await api('/settings');
-  const route = state.me.is_admin ? await api('/admin/routing') : null;
+  const route = tab === 'temp' ? await api('/admin/routing') : null;
   const pct = s.quota_mb ? Math.min(100, (s.used / (s.quota_mb * 1048576)) * 100) : 0;
-  page.innerHTML = `${head('设置')}
-  <div class="page-body narrow">
+  const body = {
+    account: `
     <section class="panel">
       <h2>用量</h2>
       <div class="usage">
@@ -691,40 +697,47 @@ async function pageSettings() {
         <div><div class="muted sm">最近 24 小时发信</div><div class="big">${s.sent_24h}<span class="muted"> / ${s.send_limit ? s.send_limit + ' 封' : '不限'}</span></div></div>
       </div>
     </section>
-    ${route ? tempTargetPanel(route) : ''}
     <form class="panel" data-sec>
       <h2>个人资料</h2>
+      <label>邮箱地址<input value="${esc(state.me.address)}" disabled></label>
       <label>显示名称<input name="name" value="${esc(s.name)}" maxlength="80"></label>
       <label>签名<textarea name="signature" rows="4">${esc(s.signature)}</textarea></label>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>
-    <form class="panel" data-sec>
-      <h2>自动回复</h2>
-      <label class="switch"><input type="checkbox" name="ar_on" ${s.ar_on ? 'checked' : ''}><span class="track"></span>开启自动回复</label>
-      <label>主题<input name="ar_subject" value="${esc(s.ar_subject)}" placeholder="留空就用「自动回复:原主题」"></label>
-      <label>内容<textarea name="ar_body" rows="4" placeholder="你好,我这几天休假,回来后会尽快回复你。">${esc(s.ar_body)}</textarea></label>
-      <label>截止日期<input name="ar_until" type="date" value="${s.ar_until ? fmtDay(s.ar_until - 1) : ''}"></label>
-      <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form>
-    <form class="panel" data-sec>
-      <h2>转发</h2>
-      <label>转发到<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
-      <label class="check"><input type="checkbox" name="fwd_keep" ${s.fwd_keep ? 'checked' : ''}> 转发后在这里也保留一份</label>
-      <p class="hint">${FWD_HINT}</p>
-      <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </form>
-    ${clientPanel()}
     <form class="panel" id="pwForm2">
       <h2>修改密码</h2>
       <label>原密码<input name="old" type="password" autocomplete="current-password" required></label>
       <label>新密码<input name="password" type="password" autocomplete="new-password" minlength="10" required placeholder="至少 10 位"></label>
       <div class="actions"><span class="error" id="pwErr"></span><button class="primary" type="submit">修改密码</button></div>
-    </form>
-  </div>`;
+    </form>`,
+    forward: `
+    <form class="panel" data-sec>
+      <h2>转发到外部邮箱</h2>
+      <label>转发到<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
+      <label class="check"><input type="checkbox" name="fwd_keep" ${s.fwd_keep ? 'checked' : ''}> 转发后在这里也保留一份</label>
+      <p class="hint">${FWD_HINT}</p>
+      <div class="actions"><button class="primary" type="submit">保存</button></div>
+    </form>`,
+    autoreply: `
+    <form class="panel" data-sec>
+      <h2>自动回复</h2>
+      <label class="switch"><input type="checkbox" name="ar_on" ${s.ar_on ? 'checked' : ''}><span class="track"></span>开启自动回复</label>
+      <label>主题<input name="ar_subject" value="${esc(s.ar_subject)}" placeholder="留空就用「自动回复:原主题」"></label>
+      <label>内容<textarea name="ar_body" rows="5" placeholder="你好,我这几天休假,回来后会尽快回复你。">${esc(s.ar_body)}</textarea></label>
+      <label>截止日期<input name="ar_until" type="date" value="${s.ar_until ? fmtDay(s.ar_until - 1) : ''}"></label>
+      <div class="actions"><button class="primary" type="submit">保存</button></div>
+    </form>`,
+    temp: route ? tempTargetPanel(route) : '',
+    client: clientPanel(),
+  }[tab];
+  page.innerHTML = `${head('设置')}
+  <div class="tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
+  <div class="page-body narrow">${body}</div>`;
   wire();
+  $$('[data-stab]', page).forEach((a) => (a.onclick = () => openPage('settings/' + a.dataset.stab)));
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
   if ($('[data-goto-send]', page)) $('[data-goto-send]', page).onclick = () => openPage('admin/send');
-  if (route) wireTempTarget($('[data-target]', page), route, pageSettings);
+  if (route) wireTempTarget($('[data-target]', page), route, () => pageSettings('temp'));
   $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(form), j = {};
@@ -736,7 +749,7 @@ async function pageSettings() {
     }
     try { await api('/settings', { method: 'POST', json: j }); state.me = await api('/me'); toast('已保存'); } catch (x) { toast(x.message); }
   }));
-  $('#pwForm2').onsubmit = async (e) => {
+  if ($('#pwForm2')) $('#pwForm2').onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     $('#pwErr').textContent = '';
@@ -1069,7 +1082,7 @@ function batchDialog(domain, reload) {
 const PAGES = { temp: pageTemp, settings: pageSettings, admin: pageAdmin };
 window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
-  if (state.me && (h === 'temp' || h === 'settings' || h.startsWith('admin'))) openPage(h);
+  if (state.me && (h === 'temp' || h.startsWith('settings') || h.startsWith('admin'))) openPage(h);
 });
 
 fillIcons();

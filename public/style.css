@@ -82,8 +82,8 @@ hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
 code { font-family: var(--mono); font-size: 12.5px; }
 .spacer { flex: 1; }
 .mobile-only { display: none; }
-/* 电脑上设置入口在右上角齿轮;手机上齿轮收起,侧栏里才显示「设置」 */
-@media (min-width: 721px) { #settingsLink { display: none; } }
+.icon-btn.sm-btn { width: 32px; height: 32px; margin-right: auto; }
+.icon-btn.sm-btn .ic { width: 16px; height: 16px; }
 
 .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ic.sm { width: 14px; height: 14px; }
@@ -313,17 +313,6 @@ button:disabled { opacity: .6; cursor: default; }
 .tabs a.on::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); }
 .page-body { padding: 0 32px 40px; display: grid; }
 .page-body.narrow, .narrow-col { max-width: 760px; display: grid; }
-/* 宽屏:设置类页面改成「左边标题说明,右边内容」两栏,分隔线铺满整行 */
-@media (min-width: 1100px) {
-  .page-body.narrow, .narrow-col { max-width: none; }
-  .narrow > .panel, .narrow-col > .panel { grid-template-columns: 220px minmax(0, 720px); column-gap: 64px; row-gap: 0; align-items: start; }
-  .narrow > .panel > *, .narrow-col > .panel > * { grid-column: 2; margin: 0 0 16px; }
-  .narrow > .panel > :last-child, .narrow-col > .panel > :last-child { margin-bottom: 0; }
-  .narrow > .panel > h2, .narrow-col > .panel > h2,
-  .narrow > .panel > .sec-head:first-child, .narrow-col > .panel > .sec-head:first-child { grid-column: 1; grid-row: 1 / span 30; margin: 0; }
-  .narrow > .panel > h2, .narrow-col > .panel > h2, .narrow .panel > .sec-head:first-child h2 { flex-direction: column; align-items: flex-start; gap: 6px; line-height: 1.4; }
-  .narrow > .panel > h3 { margin-top: 8px; }
-}
 .tabs + .page-body { padding-top: 8px; }
 .panel { padding: 24px 0; display: grid; gap: 16px; min-width: 0; border-bottom: 1px solid var(--line-soft); }
 .panel:last-child { border-bottom: none; }
@@ -527,7 +516,7 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
   .app, .app.collapsed { grid-template-columns: minmax(0, 1fr); grid-template-rows: 56px minmax(0, 1fr); }
   .topbar { padding: 4px 8px; gap: 4px; }
   .brand { width: auto; padding-left: 0; }
-  .brand-name, #refreshBtn, #settingsTop { display: none; }
+  .brand-name { display: none; }
   .top-search input { height: 40px; padding-left: 44px; font-size: 14px; }
   .top-search .ic { left: 14px; width: 18px; height: 18px; }
   .side {
