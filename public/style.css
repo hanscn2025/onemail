@@ -235,7 +235,7 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
 .me-menu a .ic { color: var(--muted); }
 
 /* 侧栏:左右 12;行高 36;图标 20,离文字 12;写信按钮和菜单同宽,图标在同一条竖线上 */
-.side { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; padding: var(--s3); overflow-y: auto; border-right: 1px solid var(--line-soft); background: var(--surface); }
+.side { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; padding: var(--s3) var(--s3) var(--s6); overflow-y: auto; /* 底部 24:「设置」和页面最后一个白块底边对齐 */ border-right: 1px solid var(--line-soft); background: var(--surface); }
 .compose-btn { align-self: stretch; justify-content: flex-start; gap: var(--s3); height: var(--h-row); padding: 0 var(--s3); border: none; background: var(--accent); color: var(--on-accent); }
 .compose-btn:hover { background: var(--accent-hover); }
 .compose-btn .ic { width: 20px; height: 20px; }
@@ -331,8 +331,15 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
    标题行 → 标签块 → 筛选块 → 主体块;块之间 16;白块内容离块边 24
    ===================================================================== */
 .app.paging .list, .app.paging .reader { display: none !important; }
-.page { grid-column: 1 / -1; min-width: 0; min-height: 0; overflow-y: auto; padding: var(--s6) var(--gutter) 40px; background: var(--page); }
-.pg-col, .pg-stack, .narrow-col { display: grid; gap: var(--gap); align-content: start; min-width: 0; }
+.page { grid-column: 1 / -1; min-width: 0; min-height: 0; overflow-y: auto; padding: var(--s6) var(--gutter); background: var(--page); }
+/* 页面高度:最后一个白块向下撑满,离底部留 24(和顶部一样);内容多时正常往下滚 */
+.pg-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 100%; }
+.pg-stack, .narrow-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.pg-col > :last-child, .pg-stack > :last-child, .narrow-col > :last-child { flex: 1 0 auto; }
+.pg-col > *, .pg-stack > *, .narrow-col > * { min-width: 0; }
+/* 撑高的表格块:表格在上,「共 N 个」固定在块底部 */
+.blk:has(> .table-wrap) { display: flex; flex-direction: column; }
+.blk > .table-wrap { flex: 1 0 auto; }
 
 /* 标题行:高 36;标题左对齐白块,操作靠右对齐白块 */
 .pg-head { display: flex; align-items: center; gap: var(--s3); min-height: var(--h-row); flex-wrap: wrap; }
@@ -387,7 +394,7 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
 .tbl.mini th:first-child, .tbl.mini td:first-child { padding-left: 0; }
 
 /* 表单块:内边距 24;块标题 → 内容 16;字段之间 16;字段名 → 控件 4;内容最宽 880;保存按钮在底部分隔线下 */
-.panel { display: grid; gap: var(--s4); padding: var(--pad); }
+.panel { display: grid; gap: var(--s4); align-content: start; padding: var(--pad); }
 .panel > :not(.actions):not(.table-wrap):not(h2):not(.sec-head) { max-width: 880px; }
 .panel h2 { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; font-size: var(--fs-lg); line-height: var(--lh-lg); }
 .panel h3 { font-size: var(--fs-md); }
