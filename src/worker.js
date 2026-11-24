@@ -101,7 +101,7 @@ async function api(request, env, url) {
     const full = await env.DB.prepare('SELECT signature FROM users WHERE id = ?').bind(user.id).first();
     const out = {
       address: user.address, name: user.name, is_admin: !!user.is_admin, domains: domainsOf(env),
-      can_send: !!(env.RESEND_API_KEY || env.EMAIL), signature: full?.signature || '', from: await fromAddresses(env, user),
+      can_send: !!(env.RESEND_API_KEY || env.EMAIL), can_resend: !!env.RESEND_API_KEY, signature: full?.signature || '', from: await fromAddresses(env, user),
     };
     if (user.is_admin) {
       const r = await env.DB.prepare(

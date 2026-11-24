@@ -72,6 +72,7 @@ const USER_COLUMNS = {
   signature: "TEXT NOT NULL DEFAULT ''",
   fwd_to: "TEXT NOT NULL DEFAULT ''",
   fwd_keep: 'INTEGER NOT NULL DEFAULT 1',
+  fwd_mode: "TEXT NOT NULL DEFAULT 'cf'", // cf:Cloudflare 原样转发(需验证);send:用发信服务重新发出(免验证)
   ar_on: 'INTEGER NOT NULL DEFAULT 0',
   ar_subject: "TEXT NOT NULL DEFAULT ''",
   ar_body: "TEXT NOT NULL DEFAULT ''",
@@ -114,6 +115,7 @@ async function loadConfig(env) {
     catchAll: env.CATCH_ALL !== undefined ? env.CATCH_ALL : s.catch_all || '',
     resendKey: env.RESEND_API_KEY || s.resend_key || '',
     catchAllFwd: s.catch_all_fwd || '',
+    catchAllFwdMode: s.catch_all_fwd_mode || 'cf',
     catchAllLocked: env.CATCH_ALL !== undefined,
   };
   if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存,别的实例完成设置后这里能读到
@@ -129,6 +131,7 @@ export async function withConfig(env) {
     CATCH_ALL: { value: cfg.catchAll },
     RESEND_API_KEY: { value: cfg.resendKey },
     CATCH_ALL_FWD: { value: cfg.catchAllFwd },
+    CATCH_ALL_FWD_MODE: { value: cfg.catchAllFwdMode },
     CATCH_ALL_LOCKED: { value: cfg.catchAllLocked },
   });
 }

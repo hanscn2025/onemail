@@ -498,7 +498,17 @@ function editDialog(title, fields, onSave, saveText = '保存') {
   if (first) first.focus();
 }
 
-const FWD_HINT = '需先在 Cloudflare「电子邮件路由 → 目标地址」中验证该邮箱。';
+// 两种转发方式:cf 原样转发(要在 Cloudflare 验证目标邮箱);send 通过 Resend 重新发出(免验证)
+function fwdModeField(mode = 'cf', name = 'fwd_mode') {
+  const can = state.me.can_resend;
+  return `<div class="field"><span class="field-title">转发方式</span>
+    <div class="choice">
+      <label class="radio-card"><input type="radio" name="${name}" value="cf" ${mode !== 'send' ? 'checked' : ''}>
+        <span><strong>直接转发</strong><span class="muted sm">原样转发,发件人不变。需先在 Cloudflare「电子邮件路由 → 目标地址」验证该邮箱</span></span></label>
+      <label class="radio-card ${can ? '' : 'off'}"><input type="radio" name="${name}" value="send" ${mode === 'send' ? 'checked' : ''} ${can ? '' : 'disabled'}>
+        <span><strong>通过发信服务转发</strong><span class="muted sm">${can ? '不用验证。发件人显示为收信地址,回复仍回到原发件人;占用发信额度' : '需先开通 Resend 发信'}</span></span></label>
+    </div></div>`;
+}
 
 // ---------- 临时邮箱收件地址(设置页和临时邮箱页共用) ----------
 // r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
@@ -515,9 +525,9 @@ function tempTargetPanel(r) {
     </div>
     <div data-custom class="stack ${custom ? '' : 'hidden'}">
       <label>收件邮箱<input name="fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="例如 you@gmail.com"></label>
+      ${fwdModeField(r.catch_all_fwd_mode)}
       <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}>
         管理员邮箱里也保留一份</label>
-      <p class="hint">${FWD_HINT}</p>
     </div>
     <div class="actions"><button class="primary" type="submit">保存</button></div>
   </form>`;
@@ -534,7 +544,7 @@ function wireTempTarget(form, r, after) {
     else {
       const fwd = form.fwd.value.trim();
       if (!fwd) { toast('请填收件邮箱'); form.fwd.focus(); return; }
-      j = { catch_all_fwd: fwd, catch_all: form.keep.checked ? box : '' };
+      j = { catch_all_fwd: fwd, catch_all_fwd_mode: form.fwd_mode.value || 'cf', catch_all: form.keep.checked ? box : '' };
     }
     if (r.locked) delete j.catch_all;
     try { await api('/admin/routing', { method: 'POST', json: j }); toast('已保存,最多 30 秒后生效'); if (after) await after(); } catch (x) { toast(x.message); }
@@ -714,8 +724,8 @@ async function pageSettings(tab = 'account') {
     <form class="panel" data-sec>
       <h2>转发到外部邮箱</h2>
       <label>转发到<input name="fwd_to" type="email" value="${esc(s.fwd_to)}" placeholder="例如 you@gmail.com"></label>
+      ${fwdModeField(s.fwd_mode)}
       <label class="check"><input type="checkbox" name="fwd_keep" ${s.fwd_keep ? 'checked' : ''}> 转发后在这里也保留一份</label>
-      <p class="hint">${FWD_HINT}</p>
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>`,
     autoreply: `
@@ -828,7 +838,7 @@ const ADMIN = {
       ${items.map((u) => `<tr data-q="${esc((u.address + ' ' + u.name + ' ' + (u.aliases || '')).toLowerCase())}">
         <td><div class="who-cell">${avatar(u.name, u.address)}<div><div><strong>${esc(u.name || u.address.split('@')[0])}</strong> ${u.is_admin ? badge('accent', '管理员') : ''}</div>
           <div class="muted sm">${esc(u.address)}${u.aliases ? ` · 别名 ${esc(u.aliases)}` : ''}</div></div></div></td>
-        <td>${u.disabled ? badge('bad', '已停用') : badge('ok', '正常')}${u.fwd_to ? `<div class="muted sm">转发到 ${esc(u.fwd_to)}</div>` : ''}${u.ar_on ? '<div class="muted sm">自动回复中</div>' : ''}</td>
+        <td>${u.disabled ? badge('bad', '已停用') : badge('ok', '正常')}${u.fwd_to ? `<div class="muted sm">转发到 ${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '(发信服务)' : ''}</div>` : ''}${u.ar_on ? '<div class="muted sm">自动回复中</div>' : ''}</td>
         <td>${fmtSize(u.used)}${u.quota_mb ? ` / ${u.quota_mb} MB` : ''}<div class="muted sm">${u.total} 封${u.send_limit ? ` · 每天最多发 ${u.send_limit} 封` : ''}</div></td>
         <td>${ago(u.last_login)}</td>
         <td class="acts">
@@ -848,12 +858,13 @@ const ADMIN = {
         <label>每天发信上限(0 为不限)<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>
       </div>
       <label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
+      ${fwdModeField(u.fwd_mode)}
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
       ${u.id ? `<label class="check"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}> 停用这个账号(不能登录,发来的信会被退回)</label>` : ''}`;
     $('#newUser').onclick = () => editDialog('新建账号', userFields(), async (f) => {
       await api('/admin/users', { method: 'POST', json: {
         address: `${String(f.get('local')).trim().toLowerCase()}@${domain}`, name: f.get('name'), password: f.get('password'),
-        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'),
+        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf',
       } });
       toast('已创建'); reload();
     }, '创建');
@@ -861,7 +872,7 @@ const ADMIN = {
       const u = items.find((x) => String(x.id) === b.dataset.uedit);
       editDialog(`编辑 ${u.address}`, userFields(u), async (f) => {
         await api(`/admin/users/${u.id}`, { method: 'PATCH', json: {
-          name: f.get('name'), quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'),
+          name: f.get('name'), quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf',
           is_admin: f.get('is_admin') === 'on', disabled: f.get('disabled') === 'on',
         } });
         toast('已保存'); reload();

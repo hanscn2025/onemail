@@ -441,6 +441,10 @@ details summary { cursor: pointer; font-size: 12px; }
 .radio-card:hover { background: var(--hover); }
 .radio-card:has(input:checked) { border-color: var(--accent); background: none; }
 .radio-card input { margin: 3px 0 0; }
+.radio-card.off { opacity: .55; cursor: default; }
+.radio-card.off:hover { background: none; }
+.field { display: grid; gap: 6px; }
+.field-title { font-size: 13px; font-weight: 600; color: var(--text-2); }
 .radio-card > span { display: grid; gap: 2px; }
 .radio-card strong { color: var(--text); font-size: 14px; font-weight: 600; }
 .def-grid { display: grid; gap: 14px; }

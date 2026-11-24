@@ -24,6 +24,13 @@ async function taken(env, address) {
 }
 
 // 外部转发地址:必须是本域名以外的合法邮箱
+const FWD_MODES = ['cf', 'send'];
+function checkMode(env, v) {
+  if (!FWD_MODES.includes(v)) return { error: '转发方式不对' };
+  if (v === 'send' && !env.RESEND_API_KEY) return { error: '还没开通 Resend 发信,不能用这种转发方式' };
+  return { value: v };
+}
+
 function checkFwd(env, v) {
   const a = lower(v);
   if (!a) return { value: '' };
@@ -112,7 +119,7 @@ export async function extra(path, method, request, env, user, url) {
     const used = (await env.DB.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM messages WHERE mailbox = ?').bind(u.address).first()).n;
     const sent = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM messages WHERE mailbox = ? AND folder = 'sent' AND date > ?`).bind(u.address, Date.now() - DAY).first()).n;
     return json({
-      name: u.name, signature: u.signature, fwd_to: u.fwd_to, fwd_keep: !!u.fwd_keep,
+      name: u.name, signature: u.signature, fwd_to: u.fwd_to, fwd_keep: !!u.fwd_keep, fwd_mode: u.fwd_mode || 'cf',
       ar_on: !!u.ar_on, ar_subject: u.ar_subject, ar_body: u.ar_body, ar_until: u.ar_until,
       quota_mb: u.quota_mb, used, send_limit: u.send_limit, sent_24h: sent,
     });
@@ -125,6 +132,7 @@ export async function extra(path, method, request, env, user, url) {
     if ('signature' in b) put('signature', clean(b.signature, 2000));
     if ('fwd_to' in b) { const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error); put('fwd_to', f.value); }
     if ('fwd_keep' in b) put('fwd_keep', b.fwd_keep ? 1 : 0);
+    if ('fwd_mode' in b) { const f = checkMode(env, b.fwd_mode); if (f.error) return err(f.error); put('fwd_mode', f.value); }
     if ('ar_on' in b) put('ar_on', b.ar_on ? 1 : 0);
     if ('ar_subject' in b) put('ar_subject', clean(b.ar_subject, 200));
     if ('ar_body' in b) put('ar_body', clean(b.ar_body, 5000));
@@ -242,7 +250,7 @@ export async function extra(path, method, request, env, user, url) {
   // ---------- 账号 ----------
   if (path === '/admin/users' && method === 'GET') {
     const r = await env.DB.prepare(
-      `SELECT u.id, u.address, u.name, u.is_admin, u.disabled, u.quota_mb, u.send_limit, u.fwd_to, u.ar_on, u.last_login, u.created_at,
+      `SELECT u.id, u.address, u.name, u.is_admin, u.disabled, u.quota_mb, u.send_limit, u.fwd_to, u.fwd_mode, u.ar_on, u.last_login, u.created_at,
          (SELECT COUNT(*) FROM messages m WHERE m.mailbox = u.address) AS total,
          (SELECT COALESCE(SUM(size), 0) FROM messages m WHERE m.mailbox = u.address) AS used,
          (SELECT group_concat(a.address, ', ') FROM addresses a WHERE a.owner = u.address AND a.kind = 'alias') AS aliases
@@ -258,9 +266,10 @@ export async function extra(path, method, request, env, user, url) {
     if (String(b.password || '').length < 10) return err('密码至少 10 位');
     if (await taken(env, address)) return err('这个地址已经存在(账号、别名或临时地址)');
     const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
-    await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, quota_mb, send_limit, fwd_to, fwd_keep, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    const fm = b.fwd_mode ? checkMode(env, b.fwd_mode) : { value: 'cf' }; if (fm.error) return err(fm.error);
+    await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, quota_mb, send_limit, fwd_to, fwd_keep, fwd_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(address, clean(b.name, 80), await hashPassword(b.password), b.is_admin ? 1 : 0, Math.max(0, Number(b.quota_mb) || 0), Math.max(0, Number(b.send_limit) || 0),
-        f.value, b.fwd_keep === false ? 0 : 1, Date.now()).run();
+        f.value, b.fwd_keep === false ? 0 : 1, fm.value, Date.now()).run();
     return json({ ok: true });
   }
   m = path.match(/^\/admin\/users\/(\d+)(\/password|\/logout)?$/);
@@ -289,6 +298,7 @@ export async function extra(path, method, request, env, user, url) {
       if ('quota_mb' in b) put('quota_mb', Math.max(0, Number(b.quota_mb) || 0));
       if ('send_limit' in b) put('send_limit', Math.max(0, Number(b.send_limit) || 0));
       if ('fwd_to' in b) { const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error); put('fwd_to', f.value); }
+      if ('fwd_mode' in b) { const f = checkMode(env, b.fwd_mode); if (f.error) return err(f.error); put('fwd_mode', f.value); }
       if ('disabled' in b) { put('disabled', b.disabled ? 1 : 0); if (b.disabled) sets.push('session_ver = session_ver + 1'); }
       if (sets.length) await env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...args, target.id).run();
       return json({ ok: true });
@@ -368,7 +378,7 @@ export async function extra(path, method, request, env, user, url) {
 
   // ---------- 收信规则:发到不存在地址的信 ----------
   if (path === '/admin/routing' && method === 'GET') {
-    return json({ catch_all: env.CATCH_ALL || '', catch_all_fwd: env.CATCH_ALL_FWD || '', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
+    return json({ catch_all: env.CATCH_ALL || '', catch_all_fwd: env.CATCH_ALL_FWD || '', catch_all_fwd_mode: env.CATCH_ALL_FWD_MODE || 'cf', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
   }
   if (path === '/admin/routing' && method === 'POST') {
     const b = await body(request);
@@ -381,6 +391,10 @@ export async function extra(path, method, request, env, user, url) {
     if ('catch_all_fwd' in b) {
       const f = checkFwd(env, b.catch_all_fwd); if (f.error) return err(f.error);
       await saveSetting(env, 'catch_all_fwd', f.value);
+    }
+    if ('catch_all_fwd_mode' in b) {
+      const f = checkMode(env, b.catch_all_fwd_mode); if (f.error) return err(f.error);
+      await saveSetting(env, 'catch_all_fwd_mode', f.value === 'cf' ? null : f.value);
     }
     return json({ ok: true });
   }

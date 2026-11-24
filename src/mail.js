@@ -25,9 +25,9 @@ const domainsOf = (env) => (env.DOMAINS || '').split(',').map((s) => s.trim().to
 const isLocal = (env, a) => domainsOf(env).includes(String(a).split('@')[1]);
 
 // 决定一封信去哪:存进哪些邮箱、转发到哪些外部地址
-// 返回 { boxes: Set, forwards: Set, reject: string|null, via: 'user'|'temp'|'alias'|'group'|'catchall' }
+// 返回 { boxes: Set, forwards: Map(外部地址 → 'cf'|'send'), reject: string|null, via: 'user'|'temp'|'alias'|'group'|'catchall' }
 export async function route(env, rcpt) {
-  const out = { boxes: new Set(), forwards: new Set(), reject: null, via: '' };
+  const out = { boxes: new Set(), forwards: new Map(), reject: null, via: '' };
   const user = await env.DB.prepare('SELECT address, disabled FROM users WHERE address = ?').bind(rcpt).first();
   if (user) {
     if (user.disabled) out.reject = 'Mailbox disabled';
@@ -46,7 +46,7 @@ export async function route(env, rcpt) {
       return out;
     }
     if (a.kind === 'group') {
-      for (const m of JSON.parse(a.members || '[]')) (isLocal(env, m) ? out.boxes : out.forwards).add(m);
+      for (const m of JSON.parse(a.members || '[]')) isLocal(env, m) ? out.boxes.add(m) : out.forwards.set(m, 'cf');
     } else if (a.owner) out.boxes.add(a.owner);
     await env.DB.prepare('UPDATE addresses SET hits = hits + 1, last_at = ? WHERE address = ?').bind(Date.now(), rcpt).run();
     if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
@@ -67,7 +67,7 @@ export async function route(env, rcpt) {
 function catchAll(env, out) {
   const box = (env.CATCH_ALL || '').trim().toLowerCase();
   if (box) out.boxes.add(box);
-  if (env.CATCH_ALL_FWD) out.forwards.add(env.CATCH_ALL_FWD);
+  if (env.CATCH_ALL_FWD) out.forwards.set(env.CATCH_ALL_FWD, env.CATCH_ALL_FWD_MODE || 'cf');
   if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
 }
 
@@ -93,6 +93,30 @@ async function autoReply(env, u, p, sender, rcpt) {
     await addLog(env, 'autoreply', u.address, s);
   } catch (e) {
     await addLog(env, 'autoreply_fail', u.address, s, e.message);
+  }
+}
+
+// 用发信服务把收到的信重新发给外部邮箱:主题、正文、附件不变,回复地址是原发件人
+async function forwardViaSend(env, p, message, rcpt, to) {
+  const from = p.from?.address ? p.from : { address: message.from, name: '' };
+  try {
+    await sendOut(env, {
+      from: { email: rcpt, name: (from.name || from.address || '').slice(0, 80) },
+      to: [to], cc: [], bcc: [],
+      replyTo: from.address || undefined,
+      subject: p.subject || '(无主题)',
+      text: p.text || '', html: p.html || (p.text ? textToHtml(p.text) : ''),
+      attachments: (p.attachments || []).map((a) => ({
+        filename: a.filename || 'attachment',
+        type: a.mimeType || 'application/octet-stream',
+        bytes: typeof a.content === 'string' ? new TextEncoder().encode(a.content) : new Uint8Array(a.content),
+        cid: a.contentId ? a.contentId.replace(/^<|>$/g, '') : undefined,
+      })),
+      headers: { 'X-Forwarded-For': rcpt, 'X-Original-From': from.address || '' },
+    });
+    await addLog(env, 'forward', message.from, rcpt, `通过发信服务转发到 ${to}`);
+  } catch (e) {
+    await addLog(env, 'forward_fail', message.from, rcpt, `通过发信服务转发到 ${to} 失败:${e.message}`);
   }
 }
 
@@ -157,7 +181,7 @@ export async function receive(message, env) {
       const used = (await env.DB.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM messages WHERE mailbox = ?').bind(box).first()).n;
       if (used + size > u.quota_mb * 1048576) { await addLog(env, 'quota', message.from, box, '邮箱满了'); continue; }
     }
-    if (u.fwd_to) r.forwards.add(u.fwd_to);
+    if (u.fwd_to) r.forwards.set(u.fwd_to, u.fwd_mode || 'cf');
     users.push({ ...u, keep: !u.fwd_to || !!u.fwd_keep });
   }
   if (!users.some((u) => u.keep) && !r.forwards.size) {
@@ -165,8 +189,11 @@ export async function receive(message, env) {
     return;
   }
 
-  // 先转发再读正文;转发只能发给在 Cloudflare 里验证过的地址
-  for (const to of r.forwards) {
+  // 两种转发:cf 由 Cloudflare 原样转发,只能发给在「电子邮件路由 → 目标地址」验证过的邮箱;
+  // send 用 Resend 重新发一封,不用验证,发件人是收信地址,回复会回到原发件人。没开通 Resend 时退回 cf。
+  const viaSend = [];
+  for (const [to, mode] of r.forwards) {
+    if (mode === 'send' && env.RESEND_API_KEY) { viaSend.push(to); continue; }
     try {
       await message.forward(to);
       await addLog(env, 'forward', message.from, rcpt, `转发到 ${to}`);
@@ -176,9 +203,11 @@ export async function receive(message, env) {
   }
 
   const keep = users.filter((u) => u.keep);
-  if (!keep.length) return;
+  if (!keep.length && !viaSend.length) return;
   const raw = await new Response(message.raw).arrayBuffer();
   const p = await PostalMime.parse(raw);
+  for (const to of viaSend) await forwardViaSend(env, p, message, rcpt, to);
+  if (!keep.length) return;
   for (const u of keep) await store(env, u.address, p, raw, message);
   await addLog(env, 'deliver', message.from, rcpt, keep.map((u) => u.address).join(', ') + (r.via !== 'user' ? `(${r.via})` : ''));
   for (const u of users) if (u.ar_on) await autoReply(env, u, p, p.from?.address || message.from, rcpt);
@@ -201,6 +230,7 @@ export async function sendOut(env, m) {
   if (m.inReplyTo) headers['In-Reply-To'] = m.inReplyTo;
   if (m.references) headers['References'] = m.references;
   if (m.autoReply) headers['Auto-Submitted'] = 'auto-replied';
+  for (const [k, v] of Object.entries(m.headers || {})) if (v) headers[k] = v;
 
   if (env.RESEND_API_KEY) {
     const r = await fetch('https://api.resend.com/emails', {
@@ -211,12 +241,13 @@ export async function sendOut(env, m) {
         to: m.to,
         cc: m.cc.length ? m.cc : undefined,
         bcc: m.bcc.length ? m.bcc : undefined,
+        reply_to: m.replyTo || undefined,
         subject: m.subject,
-        text: m.text,
-        html: m.html,
+        text: m.text || undefined,
+        html: m.html || undefined,
         headers: Object.keys(headers).length ? headers : undefined,
         attachments: m.attachments.length
-          ? m.attachments.map((a) => ({ filename: a.filename, content: b64(a.bytes), content_type: a.type }))
+          ? m.attachments.map((a) => ({ filename: a.filename, content: b64(a.bytes), content_type: a.type, content_id: a.cid || undefined }))
           : undefined,
       }),
     });

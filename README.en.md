@@ -51,6 +51,8 @@ Cloudflare dashboard → your domain → Email → Email Routing → Destination
 
 Forwarding to an unverified address fails; you will see it in the admin overview and logs.
 
+To skip verification, set the forwarding method of the temporary mail destination or an account to **通过发信服务转发 (via sending service)**. This needs Resend sending (below): the message is re-sent through Resend, so any mailbox works without verification. The trade-offs: the recipient sees your receiving address as the sender (replies still go to the original sender), and every forwarded message counts toward your sending quota. External group members always use direct forwarding.
+
 ## How it works
 
 - **Receiving**: Email Routing hands every message for the domain to the Worker's `email()` handler. After parsing with postal-mime, message metadata is stored in D1; bodies, attachments and the original .eml go to R2.
