@@ -577,16 +577,13 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .file-btn.bordered { border: 1px solid var(--line); }
 .panel label.file-btn { display: inline-flex; gap: 6px; }
 
-/* ---------- 卡片式页面:浅灰底 + 白卡片,宽松留白 ---------- */
-:root { --canvas: #f5f6f8; }
-@media (prefers-color-scheme: dark) { :root { --canvas: #17181b; } }
-.page { background: var(--canvas); }
+/* ---------- 页面分区:白底平铺,分区之间用细线隔开,字号和间距放宽 ---------- */
 .page-head { padding: 28px 32px 16px; }
-.page-body { padding: 20px 32px 48px; gap: 16px; align-content: start; }
-.tabs + .page-body { padding-top: 20px; }
-.page-body.narrow, .narrow-col { max-width: 960px; gap: 16px; }
+.page-body { padding: 0 32px 48px; align-content: start; }
+.tabs + .page-body { padding-top: 4px; }
+.page-body.narrow, .narrow-col { max-width: 880px; }
 .panel label { gap: 8px; }
-.panel, .panel:last-child { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; padding: 24px; gap: 20px; }
+.panel { padding: 28px 0; gap: 20px; }
 .panel h2 { font-size: 18px; }
 .panel label, .field-title { font-size: 14px; color: var(--text); }
 .panel input:not([type=checkbox]):not([type=radio]), .panel select { height: 36px; padding: 0 12px; }
@@ -603,14 +600,12 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .radio-card .muted.sm { font-size: 13px; line-height: 1.6; }
 .radio-card input { margin-top: 4px !important; }
 .status-line, .hint, .steps { font-size: 14px; }
-.tiles { padding-top: 0; }
-.tile { background: var(--surface); border-color: var(--line-soft); padding: 20px; }
-.two { gap: 16px; }
-.alert { margin-top: 0; background: var(--surface); font-size: 14px; }
+.tile { padding: 20px; }
+.alert { font-size: 14px; }
 @media (max-width: 760px) {
   .page-head { padding: 18px 16px 8px; }
-  .page-body { padding: 16px 16px 32px; }
-  .panel, .panel:last-child { padding: 16px; }
+  .page-body { padding: 0 16px 32px; }
+  .panel { padding: 20px 0; }
   .choice { grid-template-columns: 1fr; }
   .radio-card { min-height: 0; padding: 16px; }
 }
