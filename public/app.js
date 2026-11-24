@@ -46,7 +46,7 @@ const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-h
 const fillIcons = (root = document) => $$('i[data-i]', root).forEach((el) => { el.outerHTML = icon(el.dataset.i); });
 
 // 头像:取名字第一个字,颜色按地址固定
-const AV_COLORS = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#2563eb', '#0d9488', '#ea580c'];
+const AV_COLORS = ['#0b57d0', '#0891b2', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#2563eb', '#0d9488', '#ea580c'];
 function avatar(name, addr) {
   const t = String(name || addr || '?').trim().replace(/^["'<]+/, '');
   const ch = (t.match(/[\p{L}\p{N}]/u) || ['?'])[0].toUpperCase();
