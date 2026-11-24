@@ -626,3 +626,19 @@ dialog { padding: 24px 28px; }
 #editBody input:not([type=checkbox]):not([type=radio]), #editBody select { height: 36px; padding: 0 12px; }
 #editBody input[type=checkbox], #editBody input[type=radio] { width: 16px; height: 16px; flex: none; }
 #editForm .dlg-foot button, #editForm .actions button { height: 36px; padding: 0 16px; }
+/* 状态:小圆点 + 常规文字,不用彩色底块 */
+.badge, .badge.ok, .badge.warn, .badge.bad, .badge.neutral { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; font-size: 13px; font-weight: 400; color: var(--text-2); }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: none; }
+.badge.ok::before { background: #13a10e; }
+.badge.warn::before { background: #e8a200; }
+.badge.bad::before { background: #d13438; }
+.badge.neutral { color: var(--muted); }
+.badge.neutral::before { background: #a0a0a0; }
+.badge.accent { padding: 0 6px; font-size: 12px; color: var(--accent-ink); background: var(--accent-soft); border-radius: 4px; }
+.badge.accent::before { display: none; }
+@media (prefers-color-scheme: dark) {
+  .badge.ok, .badge.warn, .badge.bad { background: none; color: var(--text-2); }
+  .badge.ok::before { background: #6ccb5f; }
+  .badge.bad::before { background: #f1707b; }
+}
+.panel .search input:not([type=checkbox]) { padding-left: 34px; }
