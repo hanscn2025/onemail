@@ -5,6 +5,17 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // 线条图标(24x24,描边)
 const ICONS = {
+  compose: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2 2 0 0 1 3 3l-9 9a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86Z"/>',
+  filepen: '<path d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M13.38 15.63a1 1 0 1 0-3-3l-5.02 5.01a2 2 0 0 0-.5.86l-.84 2.87a.5.5 0 0 0 .62.62l2.87-.84a2 2 0 0 0 .86-.5Z"/>',
+  mailclock: '<path d="M22 10.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><circle cx="18" cy="18" r="4"/><path d="M18 16.5V18l1 1"/>',
+  admin: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/>',
+  user: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.66V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.66"/>',
+  autoreply: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="m10 7-3 3 3 3"/><path d="M17 13v-1a2 2 0 0 0-2-2H7"/>',
+  devices: '<path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8"/><path d="M10 19v-4M7 19h5"/><rect width="6" height="10" x="16" y="12" rx="2"/>',
+  imageoff: '<path d="M2 2l20 20"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><path d="M13.5 13.5 6 21"/><path d="m18 12 3 3"/><path d="M3.59 3.59A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  palette: '<circle cx="13.5" cy="6.5" r="1" fill="currentColor"/><circle cx="17.5" cy="10.5" r="1" fill="currentColor"/><circle cx="8.5" cy="7.5" r="1" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1" fill="currentColor"/><path d="M12 2a10 10 0 0 0 0 20c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.12a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.56-2.5 5.56-5.55C22 6.01 17.5 2 12 2Z"/>',
+  history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>',
   star: '<path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01Z"/>',
@@ -280,7 +291,7 @@ async function openMsg(id, showImages = false) {
       <span class="spacer"></span>
       <button class="icon-btn ${m.starred ? 'starred' : ''}" data-a="star" title="${m.starred ? '取消星标' : '加星标'}" aria-label="星标">${icon('star')}</button>
       <button class="icon-btn" data-a="unread" title="标为未读" aria-label="标为未读">${icon('unread')}</button>
-      ${m.folder === 'sent' ? '' : `<a class="icon-btn" href="/api/messages/${m.id}/raw" title="下载原始邮件" aria-label="原始邮件">${icon('code')}</a>`}
+      ${m.folder === 'sent' ? '' : `<a class="icon-btn" href="/api/messages/${m.id}/raw" title="下载原始邮件" aria-label="原始邮件">${icon('download')}</a>`}
       ${trash ? `<button class="icon-btn" data-a="restore" title="移回" aria-label="移回">${icon('restore')}</button><button class="icon-btn danger" data-a="destroy" title="彻底删除" aria-label="彻底删除">${icon('trash')}</button>` : `<button class="icon-btn" data-a="trash" title="删除" aria-label="删除">${icon('trash')}</button>`}
     </div>
     <div class="r-head">
@@ -295,7 +306,7 @@ async function openMsg(id, showImages = false) {
         </div>
       </div>
     </div>
-    ${m.html && hasRemote && !showImages ? `<div class="notice">${icon('shield')}<span>已挡住外部图片,它们可能用来追踪你是否读过这封信。</span><a data-a="images">显示图片</a></div>` : ''}
+    ${m.html && hasRemote && !showImages ? `<div class="notice">${icon('imageoff')}<span>已挡住外部图片,它们可能用来追踪你是否读过这封信。</span><a data-a="images">显示图片</a></div>` : ''}
     <div class="r-body" id="rBody"></div>
     ${atts.length ? `<div class="atts">${atts.map((a) => `<a class="att" href="/api/messages/${m.id}/att/${a.i}?dl=1" title="${esc(a.filename)}">${icon('file')}<span class="att-name">${esc(a.filename)}</span><span class="muted">${fmtSize(a.size)}</span></a>`).join('')}</div>` : ''}`;
   $('.mobile-back').style.display = window.innerWidth <= 1100 ? '' : 'none';
@@ -354,7 +365,7 @@ function quote(m) {
 
 function openCompose(kind, m) {
   if (!state.me.can_send) {
-    toast(state.me.is_admin ? '还没开通发信:到「管理后台 → 发信」填 Resend Key' : '还没开通发信,请联系管理员');
+    toast(state.me.is_admin ? '还没开通发信:到「管理中心 → 发信」填 Resend Key' : '还没开通发信,请联系管理员');
     return;
   }
   cf.reset(); $('#fileNames').textContent = ''; $('#sendErr').textContent = '';
@@ -436,7 +447,7 @@ cf.addEventListener('submit', async (e) => {
   finally { btn.disabled = false; btn.lastElementChild.textContent = '发送'; }
 });
 
-// ---------- 页面:临时邮箱、设置、管理后台 ----------
+// ---------- 页面:临时邮箱、设置、管理中心 ----------
 const page = $('#page');
 const DAY_MS = 86400000;
 const copyText = async (t) => { try { await navigator.clipboard.writeText(t); toast(`已复制 ${t}`); } catch { toast(t); } };
@@ -552,7 +563,7 @@ function TEMP_DEST_TEXT() {
 }
 
 function tempRows(items, showOwner, reload) {
-  if (!items.length) return `<div class="empty small">${icon('shuffle')}<p>还没有临时地址</p></div>`;
+  if (!items.length) return `<div class="empty small">${icon('mailclock')}<p>还没有临时地址</p></div>`;
   const now = Date.now();
   const rows = items.map((a) => {
     const expired = a.expires_at && a.expires_at < now;
@@ -676,10 +687,10 @@ function clientPanel() {
   </section>`;
 }
 
-// ---------- 个人设置:分类标签页,和管理后台同一种结构 ----------
+// ---------- 个人设置:分类标签页,和管理中心同一种结构 ----------
 const SETTINGS_TABS = [
-  ['account', '账户', 'users'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'reply'],
-  ['temp', '临时邮箱', 'shuffle', true], ['client', '客户端', 'at'],
+  ['account', '账户', 'user'], ['forward', '转发', 'forward'], ['autoreply', '自动回复', 'autoreply'],
+  ['temp', '临时邮箱', 'mailclock', true], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
   const tabs = SETTINGS_TABS.filter((t) => !t[3] || state.me.is_admin);
@@ -758,16 +769,16 @@ async function pageSettings(tab = 'account') {
   };
 }
 
-// ---------- 管理后台 ----------
+// ---------- 管理中心 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号', 'users'], ['addresses', '别名和群组', 'at'],
-  ['temps', '临时地址', 'shuffle'], ['brand', '品牌', 'image'], ['send', '发信', 'send'], ['logs', '记录', 'list'],
+  ['temps', '临时地址', 'mailclock'], ['brand', '品牌', 'palette'], ['send', '发信', 'send'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
   if (!state.me.is_admin) return;
   if (!ADMIN_TABS.some((t) => t[0] === tab)) tab = 'overview';
-  page.innerHTML = `${head('管理后台')}
+  page.innerHTML = `${head('管理中心')}
     <div class="tabs" role="tablist">${ADMIN_TABS.map(([k, t, ic]) => `<a data-tab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
     <div class="page-body" id="tabBody"><div class="empty small"><p>加载中…</p></div></div>`;
   wire();
@@ -1028,7 +1039,7 @@ const ADMIN = {
       ${items.map((x) => { const k = LOG_KINDS[x.kind] || ['neutral', x.kind]; return `<tr>
         <td class="nowrap">${fmtDate(x.at, true)}</td><td>${badge(k[0], k[1])}</td><td>${esc(x.actor)}</td>
         <td>${esc(type === 'login' ? x.ip : x.target)}</td><td class="detail">${esc(x.detail)}</td></tr>`; }).join('')}
-      </tbody></table></div>` : `<div class="empty small">${icon('list')}<p>没有记录</p></div>`}
+      </tbody></table></div>` : `<div class="empty small">${icon('history')}<p>没有记录</p></div>`}
       </section>`;
     $$('[name=lt]', el).forEach((r) => (r.onchange = () => ADMIN.logs(el, r.value, $('#logQ').value)));
     let t; $('#logQ').oninput = (e) => { clearTimeout(t); t = setTimeout(() => ADMIN.logs(el, type, e.target.value.trim()), 400); };

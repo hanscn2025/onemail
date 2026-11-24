@@ -66,7 +66,7 @@ Receiving works without this. To send mail, use Resend's free tier (100 emails/d
 
 1. Sign up for free at [resend.com](https://resend.com) and add your domain under **Domains**. Choose the automatic Cloudflare setup to have the DNS records added for you, then wait until the status is **Verified**.
 2. Under **API Keys**, create a key (**Sending access** is enough) and copy it.
-3. Sign in as admin → 管理后台 (Admin console) → 发信 (Sending), paste the key and save. The page tells you whether your domain has been verified.
+3. Sign in as admin → 管理中心 (Admin center) → 发信 (Sending), paste the key and save. The page tells you whether your domain has been verified.
 
 The free quota is shared by all accounts; you can set a per-account daily send limit under Admin console → Accounts.
 
