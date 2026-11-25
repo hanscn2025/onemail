@@ -581,3 +581,5 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 /* 「操作」列只放主操作(蓝字),宽度贴着内容;「⋯」在它右边单独一列 */
 .tbl th.op, .tbl td.op { width: 1%; white-space: nowrap; }
 .tbl td.op .lnk { margin-right: 0; }
+/* 说明文字里的外链(前往配置):蓝字,离前文 8,图标 16 离文字 4 */
+.cf-link { display: inline-flex; align-items: center; gap: var(--s1); margin-left: var(--s2); font-weight: 400; }

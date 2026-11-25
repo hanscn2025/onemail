@@ -5,7 +5,7 @@
 A webmail that runs entirely on Cloudflare. Mail sent to `anything@your-domain` lands in your web inbox. No server needed, and personal use fits within Cloudflare's free tier.
 
 - **Receive at any address**: any prefix `@your-domain` works. Each message shows which address it was sent to, and you can filter by address
-- **Temporary addresses**: write any prefix when signing up and it receives mail; after its first message it appears in the temporary address list, where you can add a note, set an expiry or disable it (later mail bounces). Where this mail goes is one global setting: the admin mailbox by default, or a custom mailbox such as Gmail. Admins can turn off Catch-all; then only temporary addresses you created receive mail
+- **Temporary addresses**: write any prefix when signing up and it receives mail; after its first message it appears in the temporary address list, where you can add a note, set an expiry or disable it (later mail bounces). Where this mail goes is one global setting: the admin mailbox by default, or a custom mailbox such as Gmail. Admins can turn off "receive at any prefix"; then only temporary addresses you created receive mail
 - **Business-style accounts**: separate accounts for family or teammates; each person signs in, sends and receives, and sees only their own mail. Bulk creation is supported
 - **Full mail features**: compose, reply, forward, drafts, signature, auto-reply, forwarding to an external mailbox; replies default to the address the mail was sent to
 - **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), branding, sending setup, and login / delivery / sending logs
@@ -40,7 +40,7 @@ Note: if this domain already uses another mail service (Google Workspace, Micros
 
 1. To an **account address**: into that account's inbox, and also forwarded if the account has forwarding set
 2. To an **alias, group or temporary address**: according to its own settings; disabled or expired addresses bounce
-3. To **any other address** (temporary addresses): handled by Temporary mail → 通配收信 (Catch-all), which stores it in the admin mailbox by default or forwards it to a custom mailbox; when that switch is off, the message bounces
+3. To **any other address** (temporary addresses): handled by Temporary mail → 任意前缀收信 (receive at any prefix), which stores it in the admin mailbox by default or forwards it to a custom mailbox; when that switch is off, the message bounces
 
 ## Forwarding to external mailboxes
 

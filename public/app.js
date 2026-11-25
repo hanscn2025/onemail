@@ -595,7 +595,7 @@ function fwdModeField(mode = 'cf', name = 'fwd_mode') {
   return `<div class="field"><span class="field-title">转发方式</span>
     <div class="choice">
       <label class="radio-card"><input type="radio" name="${name}" value="cf" ${mode !== 'send' ? 'checked' : ''}>
-        <span><strong>直接转发</strong><span class="muted sm">由 Cloudflare Email Routing 原样转发，目标地址需预先验证</span></span></label>
+        <span><strong>直接转发</strong><span class="muted sm">由 Cloudflare Email Routing 原样转发，目标地址需预先验证${state.me.is_admin ? `<a class="cf-link" href="${CF_ROUTING}" target="_blank" rel="noopener">前往配置${icon('external', 'sm')}</a>` : ''}</span></span></label>
       <label class="radio-card ${can ? '' : 'off'}"><input type="radio" name="${name}" value="send" ${mode === 'send' ? 'checked' : ''} ${can ? '' : 'disabled'}>
         <span><strong>经发信服务转发</strong><span class="muted sm">${can ? '经 Resend 重新投递，无需验证，计入发信配额' : '需先启用发信服务'}</span></span></label>
     </div></div>`;
@@ -647,7 +647,7 @@ function tempTargetPanel(r) {
   const box = r.catch_all || state.me.address;
   const dest = r.catch_all_fwd ? `${esc(r.catch_all_fwd)}${r.catch_all ? ' 和管理员邮箱' : ''}` : esc(box);
   return `<div class="blk catch-bar" data-target>
-    <div class="cb-text"><strong>通配收信（Catch-all）</strong>
+    <div class="cb-text"><strong>任意前缀收信</strong>
       <span class="muted">${on ? `未创建的 *@${esc(r.domain || '')} 地址均可收信，投递至 ${dest}` : '已停用，仅已创建的临时地址可收信'}</span>
       ${on ? '<button class="lnk" type="button" data-edit-target>编辑投递规则</button>' : ''}</div>
     <label class="switch" title="${on ? '关闭' : '打开'}"><input type="checkbox" data-toggle ${on ? 'checked' : ''}><span class="track"></span></label>
@@ -681,7 +681,7 @@ function wireTempTarget(bar, r, after) {
     if (!on && !confirm('停用后，发往未创建地址的邮件将被退回。确认停用？')) { cb.checked = true; return; }
     try {
       await api('/admin/routing', { method: 'POST', json: { catch_all_on: on } });
-      toast(on ? '已启用通配收信' : '已停用通配收信，30 秒内生效');
+      toast(on ? '已启用任意前缀收信' : '已停用任意前缀收信，30 秒内生效');
       if (after) await after();
     } catch (x) { toast(x.message); cb.checked = !on; }
   };
