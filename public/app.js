@@ -5,6 +5,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 // 线条图标(24x24，描边)
 const ICONS = {
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   compose: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2 2 0 0 1 3 3l-9 9a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86Z"/>',
@@ -493,6 +494,38 @@ function filterBar(chips, sorts) {
     ${sorts ? `<select class="sort-sel" id="sortSel">${sorts.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>` : ''}
   </div>`;
 }
+// 行操作:main 是露在外面的主操作(蓝字);items 收进「⋯」菜单:[label, icon, attrs, danger]
+function rowActs(main, items) {
+  const list = items.filter(Boolean);
+  const safe = list.filter((x) => !x[3]), danger = list.filter((x) => x[3]);
+  const btn = ([label, ic, attrs, bad]) => `<button type="button" class="menu-item ${bad ? 'danger' : ''}" ${attrs}>${icon(ic)}<span>${label}</span></button>`;
+  return `<div class="row-acts">${main}${list.length ? `<div class="row-menu">
+    <button type="button" class="icon-btn sm-btn" data-menu title="更多操作" aria-label="更多操作" aria-haspopup="true">${icon('more')}</button>
+    <div class="menu hidden" role="menu">${safe.map(btn).join('')}${safe.length && danger.length ? '<div class="menu-sep"></div>' : ''}${danger.map(btn).join('')}</div>
+  </div>` : ''}</div>`;
+}
+// 菜单:点「⋯」打开(固定定位,不会被表格裁掉),点菜单项或别处关闭
+function closeMenus() { $$('.menu:not(.hidden)').forEach((m) => m.classList.add('hidden')); }
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-menu]');
+  if (t) {
+    const m = t.nextElementSibling;
+    const open = m.classList.contains('hidden');
+    closeMenus();
+    if (open) {
+      m.classList.remove('hidden');
+      const r = t.getBoundingClientRect(), h = m.offsetHeight, w = m.offsetWidth;
+      m.style.left = `${Math.max(8, r.right - w)}px`;
+      m.style.top = `${r.bottom + 4 + h > innerHeight - 8 ? r.top - h - 4 : r.bottom + 4}px`;
+    }
+    e.stopPropagation();
+    return;
+  }
+  if (e.target.closest('.menu-item') || !e.target.closest('.menu')) closeMenus();
+});
+window.addEventListener('scroll', closeMenus, true);
+window.addEventListener('resize', closeMenus);
+
 const tblFoot = (n, unit) => `<div class="tbl-foot">共 <span data-total>${n}</span> ${unit}</div>`;
 // 行上带 data-st(状态标签,空格分开)、data-q(搜索文字)、data-s1/s2/s3(排序值)
 function wireList(tbody, { searchEl, sortEl } = {}) {
@@ -698,12 +731,11 @@ function tempRows(items, showOwner, reload) {
       <td>${to}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
-      <td class="acts">
-        <button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}">查看信</button>
-        <button class="lnk" data-tedit="${esc(a.address)}">编辑</button>
-        <button class="lnk" data-ttoggle="${esc(a.address)}" data-on="${a.enabled}" title="${a.enabled ? '停用后发来的信会被退回' : ''}">${a.enabled ? '停用' : '启用'}</button>
-        <button class="lnk danger" data-tdel="${esc(a.address)}">删除</button>
-      </td></tr>`;
+      <td class="acts">${rowActs(`<button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}">查看信</button>`, [
+        ['编辑', 'edit', `data-tedit="${esc(a.address)}"`],
+        [a.enabled ? '停用' : '启用', 'power', `data-ttoggle="${esc(a.address)}" data-on="${a.enabled}"`],
+        ['删除', 'trash', `data-tdel="${esc(a.address)}"`, true],
+      ])}</td></tr>`;
   }).join('');
   setTimeout(() => wireTemp(items, reload));
   return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th class="acts">操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
@@ -1015,12 +1047,11 @@ const ADMIN = {
         <td>${u.fwd_to ? `${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '<div class="muted sm">通过发信服务</div>' : ''}` : '<span class="muted">—</span>'}</td>
         <td>${fmtSize(u.used)}${u.quota_mb ? ` / ${u.quota_mb} MB` : ''}<div class="muted sm">${u.total} 封${u.send_limit ? ` · 每天最多发 ${u.send_limit} 封` : ''}</div></td>
         <td>${ago(u.last_login)}</td>
-        <td class="acts">
-          <button class="lnk" data-uedit="${u.id}">编辑</button>
-          <button class="lnk" data-upw="${u.id}">重设密码</button>
-          <button class="lnk" data-uout="${u.id}" title="让它在所有设备退出登录">退出登录</button>
-          ${u.address === state.me.address ? '' : `<button class="lnk danger" data-udel="${u.id}">删除</button>`}
-        </td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个账号')}</div>`;
+        <td class="acts">${rowActs(`<button class="lnk" data-uedit="${u.id}">编辑</button>`, [
+          ['重设密码', 'key', `data-upw="${u.id}"`],
+          ['在所有设备退出', 'logout', `data-uout="${u.id}"`],
+          u.address === state.me.address ? null : ['删除账号', 'trash', `data-udel="${u.id}"`, true],
+        ])}</td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个账号')}</div>`;
     const reload = () => ADMIN.users(el);
     wireList($('#userRows'), { searchEl: $('#userQ'), sortEl: $('#sortSel', el) });
     const userFields = (u = {}) => `
@@ -1087,11 +1118,10 @@ const ADMIN = {
         <td>${(a.kind === 'group' ? a.members : [a.owner]).map(esc).join('、')}</td>
         <td class="num">${a.hits}<div class="muted sm">${a.last_at ? fmtDate(a.last_at) : ''}</div></td>
         <td>${a.enabled ? badge('ok', '使用中') : badge('neutral', '已停用')}</td>
-        <td class="acts">
-          <button class="lnk" data-aedit="${esc(a.address)}">编辑</button>
-          <button class="lnk" data-atoggle="${esc(a.address)}" data-on="${a.enabled}">${a.enabled ? '停用' : '启用'}</button>
-          <button class="lnk danger" data-adel="${esc(a.address)}">删除</button>
-        </td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个')}` : `<div class="empty small">${icon('at')}<p>还没有别名或群组</p></div>`}</div>`;
+        <td class="acts">${rowActs(`<button class="lnk" data-aedit="${esc(a.address)}">编辑</button>`, [
+          [a.enabled ? '停用' : '启用', 'power', `data-atoggle="${esc(a.address)}" data-on="${a.enabled}"`],
+          ['删除', 'trash', `data-adel="${esc(a.address)}"`, true],
+        ])}</td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个')}` : `<div class="empty small">${icon('at')}<p>还没有别名或群组</p></div>`}</div>`;
     wireList($('#addrRows'), { searchEl: $('#addrQ'), sortEl: $('#sortSel', el) });
     const reload = () => ADMIN.addresses(el);
     const userOpts = (sel) => users.map((u) => `<option value="${esc(u.address)}" ${u.address === sel ? 'selected' : ''}>${esc(u.address)}${u.name ? ' · ' + esc(u.name) : ''}</option>`).join('');
