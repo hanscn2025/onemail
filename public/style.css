@@ -568,3 +568,13 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 @media (max-width: 760px) { .row-acts { justify-content: flex-start; } }
 
 /* 菜单宽度跟着内容走,左右留白一样(8 + 12) */
+/* 整行可点(点行 = 菜单第一项);「⋯」单独一列、不写表头,宽度只够按钮 */
+.tbl tr[data-row] { cursor: pointer; }
+.tbl th.acts, .tbl td.acts { width: 44px; padding-left: 0; }
+.row-acts { justify-content: flex-end; }
+@media (max-width: 760px) {
+  /* 手机卡片:「⋯」放右上角,不单独占一行 */
+  .tbl:not(.mini) tbody tr[data-row] { position: relative; }
+  .tbl:not(.mini) tbody tr[data-row] td.acts { position: absolute; top: 12px; right: 12px; width: auto; padding: 0 !important; }
+  .tbl:not(.mini) tbody tr[data-row] td:first-child { padding-right: 36px !important; }
+}

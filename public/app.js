@@ -525,6 +525,12 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.menu-item') || !e.target.closest('.menu')) closeMenus();
 });
 window.addEventListener('scroll', closeMenus, true);
+// 整行可点:点行等于点菜单里的第一项(复制、开关、菜单本身除外)
+document.addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-row]');
+  if (!tr || e.target.closest('button, a, input, label, .menu')) return;
+  tr.querySelector('.menu .menu-item')?.click();
+});
 window.addEventListener('resize', closeMenus);
 
 const tblFoot = (n, unit) => `<div class="tbl-foot">共 <span data-total>${n}</span> ${unit}</div>`;
@@ -726,20 +732,21 @@ function tempRows(items, showOwner, reload) {
     const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : badge('ok', '使用中');
     const to = a.auto ? defaultChips() : a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '');
     const exp = a.expires_at ? (expired ? '已过期' : `${fmtDay(a.expires_at)} 到期`) : '永久';
-    return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
+    return `<tr data-row data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
       <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
       <td>${to}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
-      <td class="acts">${rowActs(`<button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}" title="查看收到的信">查看</button>`, [
+      <td class="acts">${rowActs('', [
+        ['查看收到的信', 'inbox', `data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}"`],
         ['编辑', 'edit', `data-tedit="${esc(a.address)}"`],
         [a.enabled ? '停用' : '启用', 'power', `data-ttoggle="${esc(a.address)}" data-on="${a.enabled}"`],
         ['删除', 'trash', `data-tdel="${esc(a.address)}"`, true],
       ])}</td></tr>`;
   }).join('');
   setTimeout(() => wireTemp(items, reload));
-  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th class="acts">操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
+  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th class="acts" aria-label="操作"></th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
 }
 
 function wireTemp(items, reload) {
@@ -1040,15 +1047,16 @@ const ADMIN = {
     const n = (f) => items.filter(f).length;
     el.innerHTML = `${filterBar([['all', '全部', items.length], ['ok', '正常', n((u) => !u.disabled)], ['off', '已停用', n((u) => u.disabled)], ['admin', '管理员', n((u) => u.is_admin)]],
       [['1:desc', '按最近登录'], ['2:desc', '按用量'], ['3:asc', '按名称']])}
-      <div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>转发</th><th>用量</th><th>最近登录</th><th class="acts">操作</th></tr></thead><tbody id="userRows">
-      ${items.map((u) => `<tr data-q="${esc((u.address + ' ' + u.name + ' ' + (u.aliases || '')).toLowerCase())}" data-st="${u.disabled ? 'off' : 'ok'}${u.is_admin ? ' admin' : ''}" data-s1="${u.last_login || 0}" data-s2="${u.used || 0}" data-s3="${esc(u.name || u.address)}">
+      <div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>转发</th><th>用量</th><th>最近登录</th><th class="acts" aria-label="操作"></th></tr></thead><tbody id="userRows">
+      ${items.map((u) => `<tr data-row data-q="${esc((u.address + ' ' + u.name + ' ' + (u.aliases || '')).toLowerCase())}" data-st="${u.disabled ? 'off' : 'ok'}${u.is_admin ? ' admin' : ''}" data-s1="${u.last_login || 0}" data-s2="${u.used || 0}" data-s3="${esc(u.name || u.address)}">
         <td><div class="who-cell">${avatar(u.name, u.address)}<div><div><strong>${esc(u.name || u.address.split('@')[0])}</strong> ${u.is_admin ? badge('accent', '管理员') : ''}</div>
           <div class="muted sm">${esc(u.address)}${u.aliases ? ` · 别名 ${esc(u.aliases)}` : ''}</div></div></div></td>
         <td>${u.disabled ? badge('neutral', '已停用') : badge('ok', '正常')}${u.ar_on ? '<div class="muted sm">自动回复中</div>' : ''}</td>
         <td>${u.fwd_to ? `${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '<div class="muted sm">通过发信服务</div>' : ''}` : '<span class="muted">—</span>'}</td>
         <td>${fmtSize(u.used)}${u.quota_mb ? ` / ${u.quota_mb} MB` : ''}<div class="muted sm">${u.total} 封${u.send_limit ? ` · 每天最多发 ${u.send_limit} 封` : ''}</div></td>
         <td>${ago(u.last_login)}</td>
-        <td class="acts">${rowActs(`<button class="lnk" data-uedit="${u.id}">编辑</button>`, [
+        <td class="acts">${rowActs('', [
+          ['编辑', 'edit', `data-uedit="${u.id}"`],
           ['重设密码', 'key', `data-upw="${u.id}"`],
           ['在所有设备退出', 'logout', `data-uout="${u.id}"`],
           u.address === state.me.address ? null : ['删除账号', 'trash', `data-udel="${u.id}"`, true],
@@ -1112,14 +1120,15 @@ const ADMIN = {
     const n = (f) => items.filter(f).length;
     el.innerHTML = `${filterBar([['all', '全部', items.length], ['alias', '别名', n((a) => a.kind !== 'group')], ['group', '群组', n((a) => a.kind === 'group')], ['off', '已停用', n((a) => !a.enabled)]],
       [['1:desc', '按收到数量'], ['2:asc', '按地址']])}
-      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th class="acts">操作</th></tr></thead><tbody id="addrRows">
+      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th class="acts" aria-label="操作"></th></tr></thead><tbody id="addrRows">
       ${items.map((a) => `<tr data-q="${esc((a.address + ' ' + (a.note || '') + ' ' + (a.kind === 'group' ? a.members.join(' ') : a.owner)).toLowerCase())}" data-st="${a.kind === 'group' ? 'group' : 'alias'}${a.enabled ? '' : ' off'}" data-s1="${a.hits}" data-s2="${esc(a.address)}">
         <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
         <td>${a.kind === 'group' ? badge('accent', '群组') : badge('neutral', '别名')}</td>
         <td>${(a.kind === 'group' ? a.members : [a.owner]).map(esc).join('、')}</td>
         <td class="num">${a.hits}<div class="muted sm">${a.last_at ? fmtDate(a.last_at) : ''}</div></td>
         <td>${a.enabled ? badge('ok', '使用中') : badge('neutral', '已停用')}</td>
-        <td class="acts">${rowActs(`<button class="lnk" data-aedit="${esc(a.address)}">编辑</button>`, [
+        <td class="acts">${rowActs('', [
+          ['编辑', 'edit', `data-aedit="${esc(a.address)}"`],
           [a.enabled ? '停用' : '启用', 'power', `data-atoggle="${esc(a.address)}" data-on="${a.enabled}"`],
           ['删除', 'trash', `data-adel="${esc(a.address)}"`, true],
         ])}</td></tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个')}` : `<div class="empty small">${icon('at')}<p>还没有别名或群组</p></div>`}</div>`;
