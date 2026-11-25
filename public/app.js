@@ -599,15 +599,22 @@ function fwdStatusPanel(s) {
 // ---------- 临时邮箱收件地址(管理中心 → 临时邮箱) ----------
 // r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
 function tempTargetPanel(r) {
+  const on = r.catch_all_on !== false;
+  const box = r.catch_all || state.me.address;
+  const dest = r.catch_all_fwd ? `${esc(r.catch_all_fwd)}${r.catch_all ? ' 和管理员邮箱' : ''}` : esc(box);
+  return `<div class="blk catch-bar" data-target>
+    <div class="cb-text"><strong>任意前缀收信</strong>
+      <span class="muted">${on ? `用任意名字@${esc(r.domain || '')} 都能收信，送到 ${dest}` : '已关闭，只有新建的临时地址能收信'}</span>
+      ${on ? '<button class="lnk" type="button" data-edit-target>修改去向</button>' : ''}</div>
+    <label class="switch" title="${on ? '关闭' : '打开'}"><input type="checkbox" data-toggle ${on ? 'checked' : ''}><span class="track"></span></label>
+  </div>`;
+}
+
+// 修改去向:弹窗里选管理员邮箱或外部邮箱
+function targetFields(r) {
   const custom = !!r.catch_all_fwd;
   const box = r.catch_all || state.me.address;
-  const on = r.catch_all_on !== false;
-  return `<form class="panel tpanel" data-target>
-    <div class="t-head"><div class="t-title"><h2>任意前缀收信</h2>
-      <p class="hint">${on ? `任意名字@${esc(r.domain || '')} 都能收信，第一次收到时自动加进下面的列表` : '已关闭：只有新建过的临时地址能收信，其他地址的信会被退回'}</p></div>
-      <label class="switch" title="${on ? '关闭' : '打开'}"><input type="checkbox" data-toggle ${on ? 'checked' : ''}><span class="track"></span></label></div>
-    <div class="t-body ${on ? '' : 'hidden'}">
-    <div class="field"><span class="field-title">收到的信送到</span>
+  return `<div class="field">
     <div class="choice">
       <label class="radio-card"><input type="radio" name="mode" value="admin" ${custom ? '' : 'checked'}>
         <span><strong>管理员邮箱</strong><span class="muted sm">${esc(box)}</span></span></label>
@@ -617,18 +624,14 @@ function tempTargetPanel(r) {
     <div data-custom class="stack ${custom ? '' : 'hidden'}">
       <label>收件邮箱<input name="fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="例如 you@gmail.com"></label>
       ${fwdModeField(r.catch_all_fwd_mode)}
-      <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}>
-        管理员邮箱里也保留一份</label>
-    </div>
-    <div class="actions"><button class="primary" type="submit">保存</button></div>
-    </div>
-  </form>`;
+      <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}> 管理员邮箱里也保留一份</label>
+    </div>`;
 }
 
-function wireTempTarget(form, r, after) {
-  const sync = () => $('[data-custom]', form).classList.toggle('hidden', form.mode.value !== 'custom');
+function wireTempTarget(bar, r, after) {
+  if (!bar) return;
   // 开关:马上保存
-  const cb = $('[data-toggle]', form);
+  const cb = $('[data-toggle]', bar);
   cb.onchange = async () => {
     const on = cb.checked;
     if (!on && !confirm('关闭后，没新建过的地址收到的信都会被退回，确定吗？')) { cb.checked = true; return; }
@@ -638,19 +641,25 @@ function wireTempTarget(form, r, after) {
       if (after) await after();
     } catch (x) { toast(x.message); cb.checked = !on; }
   };
-  $$('[name=mode]', form).forEach((x) => (x.onchange = sync));
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const box = r.catch_all || state.me.address;
-    let j;
-    if (form.mode.value === 'admin') j = { catch_all: box, catch_all_fwd: '' };
-    else {
-      const fwd = form.fwd.value.trim();
-      if (!fwd) { toast('请填收件邮箱'); form.fwd.focus(); return; }
-      j = { catch_all_fwd: fwd, catch_all_fwd_mode: form.fwd_mode.value || 'cf', catch_all: form.keep.checked ? box : '' };
-    }
-    if (r.locked) delete j.catch_all;
-    try { await api('/admin/routing', { method: 'POST', json: j }); toast('已保存，最多 30 秒后生效'); if (after) await after(); } catch (x) { toast(x.message); }
+  const edit = $('[data-edit-target]', bar);
+  if (edit) edit.onclick = () => {
+    editDialog('收到的信送到哪里', targetFields(r), async (f, form) => {
+      const box = r.catch_all || state.me.address;
+      let j;
+      if (f.get('mode') === 'admin') j = { catch_all: box, catch_all_fwd: '' };
+      else {
+        const fwd = String(f.get('fwd') || '').trim();
+        if (!fwd) throw new Error('请填收件邮箱');
+        j = { catch_all_fwd: fwd, catch_all_fwd_mode: f.get('fwd_mode') || 'cf', catch_all: form.keep.checked ? box : '' };
+      }
+      if (r.locked) delete j.catch_all;
+      await api('/admin/routing', { method: 'POST', json: j });
+      toast('已保存，最多 30 秒后生效');
+      if (after) await after();
+    });
+    const body = $('#editBody');
+    const sync = () => $('[data-custom]', body).classList.toggle('hidden', $('[name=mode]:checked', body).value !== 'custom');
+    $$('[name=mode]', body).forEach((x) => (x.onchange = sync));
   };
 }
 
@@ -755,7 +764,7 @@ async function pageTemp() {
   ]);
   tempDefaults = defaults || null;
   const anyOn = catch_all_on !== false;
-  page.innerHTML = `<div class="pg-col">${head('临时邮箱', anyOn ? `任意前缀 <code>@${esc(domain)}</code> 都能直接收信` : '新建临时地址后才能收信', `
+  page.innerHTML = `<div class="pg-col">${head('临时邮箱', route ? '' : anyOn ? `任意前缀 <code>@${esc(domain)}</code> 都能直接收信` : '新建临时地址后才能收信', `
     ${searchBox('tempQ', '搜索地址或备注')}
     ${state.me.is_admin ? `<label class="check"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
     <button class="primary" id="newTemp">${icon('plus')}新建</button>`)}

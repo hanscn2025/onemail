@@ -544,3 +544,9 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .t-body { display: grid; gap: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line-soft); max-width: none !important; }
 .t-body > :not(.actions) { max-width: 880px; }
 .tpanel .t-body .actions { margin-top: var(--s2); }
+/* 任意前缀收信:一行;左边标题 + 一句说明 + 修改去向,右边开关 */
+.catch-bar { display: flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--pad); }
+.cb-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.cb-text strong { font-weight: 600; }
+.cb-text .muted { overflow-wrap: anywhere; }
+.catch-bar .switch { min-height: 0; }
