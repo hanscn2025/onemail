@@ -732,7 +732,7 @@ function tempRows(items, showOwner, reload) {
       <td>${to}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
-      <td class="acts">${rowActs(`<button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}">查看信</button>`, [
+      <td class="acts">${rowActs(`<button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}" title="查看收到的信">查看</button>`, [
         ['编辑', 'edit', `data-tedit="${esc(a.address)}"`],
         [a.enabled ? '停用' : '启用', 'power', `data-ttoggle="${esc(a.address)}" data-on="${a.enabled}"`],
         ['删除', 'trash', `data-tdel="${esc(a.address)}"`, true],

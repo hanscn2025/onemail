@@ -556,7 +556,7 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .tbl th.acts, .tbl td.acts { width: 1%; text-align: left; white-space: nowrap; } /* 列贴最右;列内左对齐,每行的同一个操作上下对齐 */
 @media (max-width: 760px) { .tbl:not(.mini) td.acts { width: auto; text-align: left; } }
 /* 行操作:主操作(蓝字)+「⋯」更多菜单;菜单按标准:圆角 8、内边距 8、每项高 36、图标 20 离文字 12、删除红字在分隔线下 */
-.row-acts { display: flex; align-items: center; justify-content: flex-end; gap: var(--s2); }
+.row-acts { display: flex; align-items: center; justify-content: flex-end; gap: var(--s3); } /* 主操作和「⋯」之间看起来 16(12 + 按钮内留白 4) */
 .row-acts .lnk { margin-right: 0; }
 .row-acts .icon-btn.sm-btn { width: 28px; height: 28px; }
 .menu { position: fixed; z-index: 60; width: max-content; padding: var(--s2); display: grid; gap: 2px; border-radius: var(--r-lg); background: var(--raised); box-shadow: var(--shadow-menu); }
