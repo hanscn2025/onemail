@@ -515,7 +515,8 @@ document.addEventListener('click', (e) => {
     if (open) {
       m.classList.remove('hidden');
       const r = t.getBoundingClientRect(), h = m.offsetHeight, w = m.offsetWidth;
-      m.style.left = `${Math.max(8, r.right - w)}px`;
+      // 对准「⋯」按钮的中心弹出,靠近屏幕边缘时往里收
+      m.style.left = `${Math.min(innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2))}px`;
       m.style.top = `${r.bottom + 4 + h > innerHeight - 8 ? r.top - h - 4 : r.bottom + 4}px`;
     }
     e.stopPropagation();
