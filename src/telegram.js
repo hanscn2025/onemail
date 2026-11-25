@@ -72,20 +72,20 @@ export async function tgWebhook(request, env) {
     const u = row && row.at > Date.now() - LINK_TTL
       ? await env.DB.prepare('SELECT id, address FROM users WHERE id = ?').bind(row.user_id).first()
       : null;
-    if (!u) await reply('绑定链接已失效。请回到 OneMail「设置 → 通知」重新点「绑定 Telegram」。');
+    if (!u) await reply('绑定链接已失效，请在 OneMail「设置 → 通知」中重新发起绑定。');
     else {
       await env.DB.prepare('UPDATE users SET tg_chat = ? WHERE id = ?').bind(chat, u.id).run();
-      await reply(`已绑定 ${u.address},新邮件会推送到这里。\n发送 /stop 解除绑定。`);
+      await reply(`已绑定 ${u.address}，新邮件将推送至此。\n发送 /stop 可解除绑定。`);
     }
   } else if (/^\/stop/i.test(text)) {
     const r = await env.DB.prepare("UPDATE users SET tg_chat = '' WHERE tg_chat = ?").bind(chat).run();
-    await reply(r.meta?.changes ? '已解除绑定，不会再推送新邮件。' : '这个 Telegram 账号没有绑定邮箱。');
+    await reply(r.meta?.changes ? '已解除绑定，将不再推送新邮件。' : '当前 Telegram 账号未绑定邮箱。');
   } else {
     const r = await env.DB.prepare('SELECT address FROM users WHERE tg_chat = ?').bind(chat).all();
     const list = (r.results || []).map((x) => x.address);
     await reply(list.length
-      ? `已绑定：${list.join('、')}\n发送 /stop 解除绑定。`
-      : '请在 OneMail「设置 → 通知」里点「绑定 Telegram」完成绑定。');
+      ? `已绑定：${list.join('、')}\n发送 /stop 可解除绑定。`
+      : '请在 OneMail「设置 → 通知」中点击「绑定 Telegram」完成绑定。');
   }
   return new Response('ok');
 }

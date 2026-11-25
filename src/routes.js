@@ -65,7 +65,7 @@ export async function brandRoutes(path, method, env, url) {
   }
   if (path === '/brand/logo' && method === 'GET') {
     const obj = await env.BUCKET.get('brand/logo');
-    if (!obj) return err('没有 Logo', 404);
+    if (!obj) return err('未设置 Logo', 404);
     return new Response(obj.body, {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'image/png',
@@ -150,15 +150,15 @@ export async function extra(path, method, request, env, user, url) {
   // 发测试信:从自己的地址发给自己,走完整的收信 → 转发流程
   if (path === '/fwd/test' && method === 'POST') {
     const u = await env.DB.prepare('SELECT address, name, fwd_to FROM users WHERE id = ?').bind(user.id).first();
-    if (!u.fwd_to) return err('还没设置转发地址');
-    if (!env.RESEND_API_KEY && !env.EMAIL) return err('还没开通发信，没法发测试信');
+    if (!u.fwd_to) return err('未设置转发地址');
+    if (!env.RESEND_API_KEY && !env.EMAIL) return err('发信服务未启用，无法发送测试邮件');
     const at = Date.now();
     try {
       await sendOut(env, {
         from: { email: u.address, name: u.name || '' }, to: [u.address], cc: [], bcc: [], attachments: [],
-        subject: 'OneMail 转发测试', text: `这是一封转发测试信。如果你在 ${u.fwd_to} 收到了它，说明转发设置成功。`,
+        subject: 'OneMail 转发测试', text: `这是一封转发测试邮件。若 ${u.fwd_to} 收到本邮件，说明转发配置正确。`,
       });
-    } catch (e) { return err(`测试信没发出去：${e.message}`); }
+    } catch (e) { return err(`测试邮件发送失败：${e.message}`); }
     return json({ ok: true, at });
   }
 
@@ -180,12 +180,12 @@ export async function extra(path, method, request, env, user, url) {
   if (path === '/temp' && method === 'POST') {
     const b = await body(request);
     const domain = domainsOf(env)[0];
-    if (!domain) return err('还没有设置域名');
+    if (!domain) return err('未配置域名');
     let local = lower(b.local).replace(/@.*$/, '');
     if (!local) local = randomLocal();
-    if (!LOCAL_RE.test(local) || local.includes('+')) return err('地址只能用小写字母、数字、点、横线、下划线');
+    if (!LOCAL_RE.test(local) || local.includes('+')) return err('地址仅支持小写字母、数字、点、连字符和下划线');
     const address = `${local}@${domain}`;
-    if (await taken(env, address)) return err('这个地址已经被占用了，换一个');
+    if (await taken(env, address)) return err('该地址已被占用');
     const days = Number(b.days) || 0;
     // 去向不在这里设：管理员的临时地址跟随全局设置(设置 → 临时邮箱收件地址)，普通账号的进自己邮箱
     await env.DB.prepare(
@@ -197,7 +197,7 @@ export async function extra(path, method, request, env, user, url) {
   if (m) {
     const address = lower(decodeURIComponent(m[1]));
     const a = await env.DB.prepare(`SELECT * FROM addresses WHERE address = ? AND kind = 'temp'`).bind(address).first();
-    if (!a || (a.owner !== user.address && !user.is_admin)) return err('没有这个临时地址', 404);
+    if (!a || (a.owner !== user.address && !user.is_admin)) return err('临时地址不存在', 404);
     if (method === 'DELETE') {
       await env.DB.prepare('DELETE FROM addresses WHERE address = ?').bind(address).run();
       return json({ ok: true });
@@ -220,7 +220,7 @@ export async function extra(path, method, request, env, user, url) {
     const id = String(fd.get('draft_id') || '') || crypto.randomUUID();
     if (fd.get('draft_id')) {
       const d = await env.DB.prepare(`SELECT mailbox FROM messages WHERE id = ? AND folder = 'drafts'`).bind(id).first();
-      if (!d || d.mailbox !== user.address) return err('没有这个草稿', 404);
+      if (!d || d.mailbox !== user.address) return err('草稿不存在', 404);
     }
     const list = (k) => String(fd.get(k) || '').split(/[,;，；\s]+/).map((x) => x.trim().toLowerCase()).filter(Boolean).map((address) => ({ name: '', address }));
     const text = String(fd.get('text') || '');
@@ -238,7 +238,7 @@ export async function extra(path, method, request, env, user, url) {
 
   // ---------- Telegram 通知(每个人自己绑定) ----------
   if (path === '/tg/link' && method === 'POST') {
-    if (!env.TG_TOKEN || !env.TG_BOT) return err('管理员还没设置 Telegram 机器人');
+    if (!env.TG_TOKEN || !env.TG_BOT) return err('管理员尚未配置 Telegram 机器人');
     return json({ url: await tgLink(env, user.id) });
   }
   if (path === '/tg/unbind' && method === 'POST') {
@@ -247,14 +247,14 @@ export async function extra(path, method, request, env, user, url) {
   }
   if (path === '/tg/test' && method === 'POST') {
     const u = await env.DB.prepare('SELECT tg_chat FROM users WHERE id = ?').bind(user.id).first();
-    if (!env.TG_TOKEN || !u?.tg_chat) return err('还没绑定 Telegram');
-    const j = await tgCall(env.TG_TOKEN, 'sendMessage', { chat_id: u.tg_chat, text: `测试消息：${user.address} 的新邮件会推送到这里。` });
+    if (!env.TG_TOKEN || !u?.tg_chat) return err('尚未绑定 Telegram');
+    const j = await tgCall(env.TG_TOKEN, 'sendMessage', { chat_id: u.tg_chat, text: `测试消息：${user.address} 的新邮件将推送至此。` });
     if (!j.ok) return err(`发送失败：${j.description || ''}`);
     return json({ ok: true });
   }
 
   if (!path.startsWith('/admin/')) return null;
-  if (!user.is_admin) return err('需要管理员', 403);
+  if (!user.is_admin) return err('需要管理员权限', 403);
 
   // ---------- 概览 ----------
   if (path === '/admin/overview' && method === 'GET') {
@@ -299,10 +299,10 @@ export async function extra(path, method, request, env, user, url) {
   if (path === '/admin/users' && method === 'POST') {
     const b = await body(request);
     const address = lower(b.address);
-    if (!EMAIL_RE.test(address) || address.includes('+')) return err('地址格式不对');
-    if (!isLocal(env, address)) return err(`只能用这些域名：${domainsOf(env).join(', ')}`);
+    if (!EMAIL_RE.test(address) || address.includes('+')) return err('地址格式无效');
+    if (!isLocal(env, address)) return err(`仅支持以下域名：${domainsOf(env).join(', ')}`);
     if (String(b.password || '').length < 10) return err('密码至少 10 位');
-    if (await taken(env, address)) return err('这个地址已经存在(账号、别名或临时地址)');
+    if (await taken(env, address)) return err('该地址已被账号、别名或临时地址占用');
     const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
     const fm = b.fwd_mode ? checkMode(env, b.fwd_mode) : { value: 'cf' }; if (fm.error) return err(fm.error);
     await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, quota_mb, send_limit, fwd_to, fwd_keep, fwd_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -365,18 +365,18 @@ export async function extra(path, method, request, env, user, url) {
     const kind = b.kind === 'group' ? 'group' : 'alias';
     const domain = domainsOf(env)[0];
     const local = lower(b.local).replace(/@.*$/, '');
-    if (!LOCAL_RE.test(local)) return err('地址只能用小写字母、数字、点、横线、下划线');
+    if (!LOCAL_RE.test(local)) return err('地址仅支持小写字母、数字、点、连字符和下划线');
     const address = `${local}@${domain}`;
-    if (await taken(env, address)) return err('这个地址已经被占用了');
+    if (await taken(env, address)) return err('该地址已被占用');
     let owner = null, members = [];
     if (kind === 'alias') {
       owner = lower(b.owner);
-      if (!(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(owner).first())) return err('请选择这个别名属于哪个账号');
+      if (!(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(owner).first())) return err('请选择别名所属账号');
     } else {
       members = [...new Set((Array.isArray(b.members) ? b.members : String(b.members || '').split(/[,;，；\s]+/)).map(lower).filter(Boolean))];
       if (!members.length) return err('群组至少要有一个成员');
       const bad = members.find((x) => !EMAIL_RE.test(x));
-      if (bad) return err(`成员地址格式不对：${bad}`);
+      if (bad) return err(`成员地址格式无效：${bad}`);
       if (members.length > 50) return err('群组最多 50 个成员');
     }
     await env.DB.prepare(`INSERT INTO addresses (address, kind, owner, members, note, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -387,7 +387,7 @@ export async function extra(path, method, request, env, user, url) {
   if (m) {
     const address = lower(decodeURIComponent(m[1]));
     const a = await env.DB.prepare('SELECT * FROM addresses WHERE address = ?').bind(address).first();
-    if (!a) return err('没有这个地址', 404);
+    if (!a) return err('地址不存在', 404);
     if (method === 'DELETE') {
       await env.DB.prepare('DELETE FROM addresses WHERE address = ?').bind(address).run();
       return json({ ok: true });
@@ -399,13 +399,13 @@ export async function extra(path, method, request, env, user, url) {
       if ('note' in b) next.note = clean(b.note, 100);
       if ('owner' in b && a.kind !== 'group') {
         next.owner = lower(b.owner);
-        if (!(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(next.owner).first())) return err('没有这个账号');
+        if (!(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(next.owner).first())) return err('账号不存在');
       }
       if ('members' in b && a.kind === 'group') {
         const list = [...new Set((Array.isArray(b.members) ? b.members : String(b.members || '').split(/[,;，；\s]+/)).map(lower).filter(Boolean))];
         if (!list.length) return err('群组至少要有一个成员');
         const bad = list.find((x) => !EMAIL_RE.test(x));
-        if (bad) return err(`成员地址格式不对：${bad}`);
+        if (bad) return err(`成员地址格式无效：${bad}`);
         next.members = JSON.stringify(list);
       }
       await env.DB.prepare('UPDATE addresses SET enabled = ?, note = ?, owner = ?, members = ? WHERE address = ?')
@@ -426,17 +426,17 @@ export async function extra(path, method, request, env, user, url) {
       if (env.TG_TOKEN) await tgCall(env.TG_TOKEN, 'deleteWebhook', {});
       for (const k of ['tg_token', 'tg_bot', 'tg_secret']) await saveSetting(env, k, null);
       await env.DB.prepare("UPDATE users SET tg_chat = ''").run();
-      return json({ ok: true, note: '已断开机器人' });
+      return json({ ok: true, note: '已停用 Telegram 机器人' });
     }
-    if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return err('Token 格式不对，应该像 123456789:AAH... 这样');
+    if (!/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token)) return err('Token 格式无效，应为 123456789:AAH… 格式');
     const me = await tgCall(token, 'getMe');
-    if (!me.ok) return err(`Telegram 不认这个 Token:${me.description || ''}`);
+    if (!me.ok) return err(`Telegram 校验 Token 失败：${me.description || ''}`);
     const secret = [...crypto.getRandomValues(new Uint8Array(24))].map((x) => x.toString(16).padStart(2, '0')).join('');
     let note = `已连接 @${me.result.username}`;
     if (url.protocol === 'https:') {
       const w = await tgCall(token, 'setWebhook', { url: `${url.origin}/tg/webhook`, secret_token: secret, allowed_updates: ['message'], drop_pending_updates: true });
-      if (!w.ok) return err(`设置机器人回调失败：${w.description || ''}`);
-    } else note += '。当前不是 https 地址，Telegram 回调不到这里，绑定要在线上使用';
+      if (!w.ok) return err(`设置 Webhook 失败：${w.description || ''}`);
+    } else note += '。当前非 HTTPS 访问，Webhook 无法生效，请在线上地址完成配置';
     await saveSetting(env, 'tg_token', token);
     await saveSetting(env, 'tg_bot', me.result.username);
     await saveSetting(env, 'tg_secret', secret);
@@ -452,9 +452,9 @@ export async function extra(path, method, request, env, user, url) {
     const b = await body(request);
     if ('catch_all_on' in b) await saveSetting(env, 'catch_all_off', b.catch_all_on ? null : '1');
     if ('catch_all' in b) {
-      if (env.CATCH_ALL_LOCKED) return err('兜底邮箱写在配置文件里（CATCH_ALL），这里改不了');
+      if (env.CATCH_ALL_LOCKED) return err('通配收件邮箱由配置文件（CATCH_ALL）指定，此处不可修改');
       const box = lower(b.catch_all);
-      if (box && !(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(box).first())) return err('兜底邮箱必须是已有的账号');
+      if (box && !(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(box).first())) return err('通配收件邮箱必须是已存在的账号');
       await saveSetting(env, 'catch_all', box || null);
     }
     if ('catch_all_fwd' in b) {
@@ -479,7 +479,7 @@ export async function extra(path, method, request, env, user, url) {
     const fd = await request.formData();
     const f = fd.get('logo');
     if (!f || typeof f === 'string' || !f.size) return err('请选择图片');
-    if (!LOGO_TYPES.includes(f.type)) return err('只支持 PNG、JPG、WebP、GIF、SVG 图片');
+    if (!LOGO_TYPES.includes(f.type)) return err('仅支持 PNG、JPG、WebP、GIF、SVG 格式');
     if (f.size > 512 * 1024) return err('图片不能超过 512KB');
     await env.BUCKET.put('brand/logo', await f.arrayBuffer(), { httpMetadata: { contentType: f.type } });
     await saveSetting(env, 'brand_logo_ver', String(Date.now()));

@@ -578,3 +578,6 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
   .tbl:not(.mini) tbody tr[data-row] td.acts { position: absolute; top: 12px; right: 12px; width: auto; padding: 0 !important; }
   .tbl:not(.mini) tbody tr[data-row] td:first-child { padding-right: 36px !important; }
 }
+/* 「操作」列只放主操作(蓝字),宽度贴着内容;「⋯」在它右边单独一列 */
+.tbl th.op, .tbl td.op { width: 1%; white-space: nowrap; }
+.tbl td.op .lnk { margin-right: 0; }

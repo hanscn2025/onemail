@@ -61,7 +61,7 @@ async function api(request, env, url) {
     const n = (await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first()).n;
     if (method === 'GET') return json({ needed: n === 0 });
     if (method === 'POST') {
-      if (n > 0) return err('已经设置过了，请直接登录', 409);
+      if (n > 0) return err('已完成初始化，请直接登录', 409);
       const r = await runSetup(env, await request.json().catch(() => ({})), hashPassword);
       if (r.error) return err(r.error, r.status || 400);
       const cfgEnv = await withConfig(env.__raw);
@@ -69,23 +69,23 @@ async function api(request, env, url) {
       return json({ ok: true, address: r.address }, 200, { 'Set-Cookie': await makeSessionCookie(cfgEnv, u) });
     }
   }
-  if (!isConfigured(env)) return err('还没完成首次设置', 503);
+  if (!isConfigured(env)) return err('尚未完成初始化', 503);
 
   if (path === '/login' && method === 'POST') {
     const { address, password } = await request.json().catch(() => ({}));
     const addr = String(address || '').trim().toLowerCase();
     const ip = request.headers.get('CF-Connecting-IP') || 'local';
     const keys = [`ip:${ip}`, `u:${addr}`];
-    if (await checkLocked(env, keys)) return err('失败次数太多，请 15 分钟后再试', 429);
+    if (await checkLocked(env, keys)) return err('登录失败次数过多，请 15 分钟后重试', 429);
     const u = await env.DB.prepare('SELECT * FROM users WHERE address = ?').bind(addr).first();
     if (!u || !(await verifyPassword(String(password || ''), u.pass_hash))) {
       await recordFail(env, keys);
       await addLog(env, 'login_fail', addr, '', '密码不对或没有这个账号', ip);
-      return err('邮箱或密码不对', 401);
+      return err('邮箱或密码错误', 401);
     }
     if (u.disabled) {
       await addLog(env, 'login_fail', addr, '', '账号已停用', ip);
-      return err('这个账号已被管理员停用', 403);
+      return err('该账号已被停用', 403);
     }
     await clearFail(env, keys);
     await env.DB.prepare('UPDATE users SET last_login = ? WHERE id = ?').bind(Date.now(), u.id).run();
@@ -165,7 +165,7 @@ async function api(request, env, url) {
   let m = path.match(/^\/messages\/([0-9a-f-]{36})(\/.*)?$/);
   if (m) {
     const msg = await loadMsg(env, user, m[1]);
-    if (!msg) return err('没有这封信', 404);
+    if (!msg) return err('邮件不存在', 404);
     const sub = m[2] || '';
 
     if (sub === '' && method === 'GET') {
@@ -196,7 +196,7 @@ async function api(request, env, url) {
     }
 
     if (sub === '' && method === 'DELETE') {
-      if (msg.folder !== 'trash' && msg.folder !== 'drafts') return err('先移到垃圾箱');
+      if (msg.folder !== 'trash' && msg.folder !== 'drafts') return err('请先移至垃圾箱');
       await deleteMsgObjects(env, msg);
       await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(msg.id).run();
       return json({ ok: true });
@@ -204,7 +204,7 @@ async function api(request, env, url) {
 
     if (sub === '/raw' && method === 'GET') {
       const obj = await env.BUCKET.get(`raw/${msg.id}.eml`);
-      if (!obj) return err('没有原始邮件', 404);
+      if (!obj) return err('原始邮件不存在', 404);
       return new Response(obj.body, {
         headers: { 'Content-Type': 'message/rfc822', 'Content-Disposition': contentDisposition(`${msg.subject || 'mail'}.eml`), 'X-Content-Type-Options': 'nosniff' },
       });
@@ -214,7 +214,7 @@ async function api(request, env, url) {
     if (am && method === 'GET') {
       const a = JSON.parse(msg.attach_json).find((x) => x.i === Number(am[1]));
       const obj = a && (await env.BUCKET.get(`att/${msg.id}/${a.i}`));
-      if (!obj) return err('没有这个附件', 404);
+      if (!obj) return err('附件不存在', 404);
       // 图片可以内嵌显示，其他一律下载，避免附件里的 HTML 在本站运行
       const isImg = /^image\/(png|jpe?g|gif|webp|bmp)$/i.test(a.type) && url.searchParams.get('dl') !== '1';
       return new Response(obj.body, {
@@ -236,9 +236,9 @@ async function api(request, env, url) {
     const cc = parseAddrs(fd.get('cc'));
     const bcc = parseAddrs(fd.get('bcc'));
     const all = [...to, ...cc, ...bcc];
-    if (!to.length) return err('请填收件人');
+    if (!to.length) return err('请填写收件人');
     const bad = all.find((a) => !EMAIL_RE.test(a));
-    if (bad) return err(`地址格式不对：${bad}`);
+    if (bad) return err(`地址格式无效：${bad}`);
     if (all.length > 50) return err('收件人最多 50 个');
     const subject = String(fd.get('subject') || '').slice(0, 500);
     const text = String(fd.get('text') || '');
@@ -267,7 +267,7 @@ async function api(request, env, url) {
     const asBox = String(fd.get('from') || '').toLowerCase();
     if (asBox && asBox !== user.address) {
       const mine = await fromAddresses(env, user);
-      if (!mine.includes(asBox) && !(user.is_admin && domainsOf(env).includes(asBox.split('@')[1]))) return err('不能用这个地址发信', 403);
+      if (!mine.includes(asBox) && !(user.is_admin && domainsOf(env).includes(asBox.split('@')[1]))) return err('无权使用该地址发信', 403);
       fromAddr = asBox;
     }
     // 每天发信上限(管理员给账号设的，0 表示不限)
@@ -275,7 +275,7 @@ async function api(request, env, url) {
     if (lim?.send_limit) {
       const n = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM messages WHERE mailbox = ? AND folder = 'sent' AND date > ?`)
         .bind(user.address, Date.now() - 86400000).first()).n;
-      if (n >= lim.send_limit) return err(`已达到每天 ${lim.send_limit} 封的发信上限，请明天再发或联系管理员`, 429);
+      if (n >= lim.send_limit) return err(`已达每日发信上限（${lim.send_limit} 封），请明日再试或联系管理员`, 429);
     }
     const fromUser = await env.DB.prepare('SELECT name FROM users WHERE address = ?').bind(fromAddr).first();
     const html = textToHtml(text);
@@ -322,7 +322,7 @@ async function api(request, env, url) {
   if (path === '/password' && method === 'POST') {
     const { old, password } = await request.json().catch(() => ({}));
     const u = await env.DB.prepare('SELECT pass_hash FROM users WHERE id = ?').bind(user.id).first();
-    if (!(await verifyPassword(String(old || ''), u.pass_hash))) return err('原密码不对');
+    if (!(await verifyPassword(String(old || ''), u.pass_hash))) return err('原密码错误');
     if (String(password || '').length < 10) return err('新密码至少 10 位');
     await env.DB.prepare('UPDATE users SET pass_hash = ?, session_ver = session_ver + 1 WHERE id = ?')
       .bind(await hashPassword(password), user.id).run();
@@ -341,7 +341,7 @@ async function api(request, env, url) {
 
   // ---- 管理员：发信设置 ----
   if (path.startsWith('/admin/')) {
-    if (!user.is_admin) return err('需要管理员', 403);
+    if (!user.is_admin) return err('需要管理员权限', 403);
 
     // 发信设置：Resend API Key 存在 settings 表；wrangler secret 里的 RESEND_API_KEY 优先
     if (path === '/admin/send' && method === 'GET') {
@@ -355,7 +355,7 @@ async function api(request, env, url) {
       const { key } = await request.json().catch(() => ({}));
       const k = String(key || '').trim();
       if (!k) { await saveSetting(env, 'resend_key', null); return json({ ok: true, note: '已清除' }); }
-      if (!/^re_[A-Za-z0-9_-]{8,}$/.test(k)) return err('Key 格式不对，应该是 re_ 开头的一串字符');
+      if (!/^re_[A-Za-z0-9_-]{8,}$/.test(k)) return err('Key 格式无效，应以 re_ 开头');
       // 用这个 Key 查一下 Resend 里的域名，顺便看域名有没有验证通过
       let note = '已保存';
       const r = await fetch('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${k}` } }).catch(() => null);
@@ -364,15 +364,15 @@ async function api(request, env, url) {
         const list = j.data || [];
         const mine = domainsOf(env);
         const hit = list.find((d) => mine.includes(String(d.name).toLowerCase()));
-        if (!hit) note = `已保存。但 Resend 里还没有添加 ${mine.join('、')},先去 Resend 添加域名，不然发不出去`;
-        else if (hit.status !== 'verified') note = `已保存。Resend 里的 ${hit.name} 状态是「${hit.status}」，等它变成 verified 才能发信`;
-        else note = `已保存，${hit.name} 已在 Resend 验证通过，可以发信了`;
+        if (!hit) note = `已保存。Resend 中尚未添加 ${mine.join('、')}，请先添加并验证域名`;
+        else if (hit.status !== 'verified') note = `已保存。${hit.name} 在 Resend 中的状态为「${hit.status}」，验证通过（verified）后方可发信`;
+        else note = `已保存，${hit.name} 已在 Resend 验证通过`;
       } else if (r && /restricted/i.test(j.name || j.message || '')) {
-        note = '已保存(这个 Key 只有发信权限，没法检查域名状态)';
+        note = '已保存（该 Key 仅有发信权限，无法检查域名状态）';
       } else if (r && r.status >= 400 && r.status < 500) {
-        return err(`Resend 不认这个 Key:${j.message || r.status},请重新复制`);
+        return err(`Resend 校验 Key 失败：${j.message || r.status}，请检查后重试`);
       } else if (!r || r.status >= 500) {
-        note = '已保存（暂时连不上 Resend，没检查 Key）';
+        note = '已保存（暂时无法连接 Resend，未校验 Key）';
       }
       await saveSetting(env, 'resend_key', k);
       return json({ ok: true, note });
@@ -414,7 +414,7 @@ export default {
         return await api(request, cfgEnv, url);
       } catch (e) {
         console.error(e);
-        return err('服务器出错了', 500);
+        return err('服务器内部错误', 500);
       }
     }
     return env.ASSETS.fetch(request);
