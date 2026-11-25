@@ -667,12 +667,13 @@ function wireTempTarget(bar, r, after) {
 // 默认规则(=兜底规则)当前送到哪，用来显示自动地址的去向
 let tempDefaults = null;
 function defaultChips() {
+  // 自动登记的地址跟随默认规则:纯文字,和表头左对齐
   const d = tempDefaults;
-  if (!d) return `<span class="chip">跟随默认规则</span>`;
+  if (!d) return '跟随默认规则';
   const parts = [];
-  if (d.box) parts.push(`<span class="chip">${icon('inbox', 'sm')}${d.box === state.me.address ? '我的邮箱' : esc(d.box)}</span>`);
-  if (d.fwd) parts.push(`<span class="chip">${icon('forward', 'sm')}${esc(d.fwd)}</span>`);
-  return parts.join('') || '<span class="chip">退回</span>';
+  if (d.box) parts.push(d.box === state.me.address ? '我的邮箱' : esc(d.box));
+  if (d.fwd) parts.push(`转发到 ${esc(d.fwd)}`);
+  return parts.join('、') || '退回';
 }
 
 function tempBar(items) {
@@ -689,12 +690,12 @@ function tempRows(items, showOwner, reload) {
   const rows = items.map((a) => {
     const expired = a.expires_at && a.expires_at < now;
     const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : badge('ok', '使用中');
-    const to = a.auto ? defaultChips() : `<span class="chip">${icon('inbox', 'sm')}${a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '')}</span>`;
+    const to = a.auto ? defaultChips() : a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '');
     const exp = a.expires_at ? (expired ? '已过期' : `${fmtDay(a.expires_at)} 到期`) : '永久';
     return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
       <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
-      <td><div class="chips">${to}</div>${a.auto ? '' : ''}</td>
+      <td>${to}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
       <td class="acts">
@@ -705,7 +706,7 @@ function tempRows(items, showOwner, reload) {
       </td></tr>`;
   }).join('');
   setTimeout(() => wireTemp(items, reload));
-  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th>操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
+  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th class="acts">操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
 }
 
 function wireTemp(items, reload) {
@@ -1006,7 +1007,7 @@ const ADMIN = {
     const n = (f) => items.filter(f).length;
     el.innerHTML = `${filterBar([['all', '全部', items.length], ['ok', '正常', n((u) => !u.disabled)], ['off', '已停用', n((u) => u.disabled)], ['admin', '管理员', n((u) => u.is_admin)]],
       [['1:desc', '按最近登录'], ['2:desc', '按用量'], ['3:asc', '按名称']])}
-      <div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>转发</th><th>用量</th><th>最近登录</th><th>操作</th></tr></thead><tbody id="userRows">
+      <div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>账号</th><th>状态</th><th>转发</th><th>用量</th><th>最近登录</th><th class="acts">操作</th></tr></thead><tbody id="userRows">
       ${items.map((u) => `<tr data-q="${esc((u.address + ' ' + u.name + ' ' + (u.aliases || '')).toLowerCase())}" data-st="${u.disabled ? 'off' : 'ok'}${u.is_admin ? ' admin' : ''}" data-s1="${u.last_login || 0}" data-s2="${u.used || 0}" data-s3="${esc(u.name || u.address)}">
         <td><div class="who-cell">${avatar(u.name, u.address)}<div><div><strong>${esc(u.name || u.address.split('@')[0])}</strong> ${u.is_admin ? badge('accent', '管理员') : ''}</div>
           <div class="muted sm">${esc(u.address)}${u.aliases ? ` · 别名 ${esc(u.aliases)}` : ''}</div></div></div></td>
@@ -1079,11 +1080,11 @@ const ADMIN = {
     const n = (f) => items.filter(f).length;
     el.innerHTML = `${filterBar([['all', '全部', items.length], ['alias', '别名', n((a) => a.kind !== 'group')], ['group', '群组', n((a) => a.kind === 'group')], ['off', '已停用', n((a) => !a.enabled)]],
       [['1:desc', '按收到数量'], ['2:asc', '按地址']])}
-      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th>操作</th></tr></thead><tbody id="addrRows">
+      <div class="blk">${items.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th><th>类型</th><th>送到</th><th class="num">收到</th><th>状态</th><th class="acts">操作</th></tr></thead><tbody id="addrRows">
       ${items.map((a) => `<tr data-q="${esc((a.address + ' ' + (a.note || '') + ' ' + (a.kind === 'group' ? a.members.join(' ') : a.owner)).toLowerCase())}" data-st="${a.kind === 'group' ? 'group' : 'alias'}${a.enabled ? '' : ' off'}" data-s1="${a.hits}" data-s2="${esc(a.address)}">
         <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
         <td>${a.kind === 'group' ? badge('accent', '群组') : badge('neutral', '别名')}</td>
-        <td><div class="chips">${(a.kind === 'group' ? a.members : [a.owner]).map((m) => `<span class="chip">${esc(m)}</span>`).join('')}</div></td>
+        <td>${(a.kind === 'group' ? a.members : [a.owner]).map(esc).join('、')}</td>
         <td class="num">${a.hits}<div class="muted sm">${a.last_at ? fmtDate(a.last_at) : ''}</div></td>
         <td>${a.enabled ? badge('ok', '使用中') : badge('neutral', '已停用')}</td>
         <td class="acts">

@@ -550,3 +550,8 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .cb-text strong { font-weight: 600; }
 .cb-text .muted { overflow-wrap: anywhere; }
 .catch-bar .switch { min-height: 0; }
+/* 表格对齐规则:所有列左对齐(表头和内容左边对齐);单元格里只放文字,不放灰底小框;
+   「操作」列在最右、靠右、宽度贴着内容,右边和「共 N 个」、排序框对齐 */
+.tbl th, .tbl td, .tbl .num { text-align: left; }
+.tbl th.acts, .tbl td.acts { width: 1%; text-align: left; white-space: nowrap; } /* 列贴最右;列内左对齐,每行的同一个操作上下对齐 */
+@media (max-width: 760px) { .tbl:not(.mini) td.acts { width: auto; text-align: left; } }
