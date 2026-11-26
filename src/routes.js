@@ -295,7 +295,7 @@ export async function extra(path, method, request, env, user, url) {
          (SELECT group_concat(a.address, ', ') FROM addresses a WHERE a.owner = u.address AND a.kind = 'alias') AS aliases
        FROM users u ORDER BY u.is_admin DESC, u.address`
     ).all();
-    return json({ items: r.results, domains: domainsOf(env), catch_all: env.CATCH_ALL || '' });
+    return json({ items: r.results, domains: domainsOf(env), catch_all: env.CATCH_ALL || '', default_quota_mb: Number(await getSetting(env, 'default_quota_mb')) || 0 });
   }
   if (path === '/admin/users' && method === 'POST') {
     const b = await body(request);
@@ -307,7 +307,7 @@ export async function extra(path, method, request, env, user, url) {
     const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
     const fm = b.fwd_mode ? checkMode(env, b.fwd_mode) : { value: 'cf' }; if (fm.error) return err(fm.error);
     await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, quota_mb, send_limit, fwd_to, fwd_keep, fwd_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(address, clean(b.name, 80), await hashPassword(b.password), b.is_admin ? 1 : 0, Math.max(0, Number(b.quota_mb) || 0), Math.max(0, Number(b.send_limit) || 0),
+      .bind(address, clean(b.name, 80), await hashPassword(b.password), b.is_admin ? 1 : 0, Math.max(0, Number('quota_mb' in b ? b.quota_mb : await getSetting(env, 'default_quota_mb')) || 0), Math.max(0, Number(b.send_limit) || 0),
         f.value, b.fwd_keep === false ? 0 : 1, fm.value, Date.now()).run();
     return json({ ok: true });
   }
@@ -443,6 +443,24 @@ export async function extra(path, method, request, env, user, url) {
     await saveSetting(env, 'tg_secret', secret);
     await saveSetting(env, 'app_url', url.origin);
     return json({ ok: true, note, bot: me.result.username });
+  }
+
+  // ---------- 存储设置:保留期限、新账号默认存储上限 ----------
+  if (path === '/admin/storage' && method === 'GET') {
+    const num = async (k) => Number(await getSetting(env, k)) || 0;
+    const u = await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS size FROM messages`).first();
+    return json({ temp_days: await num('ret_temp_days'), all_days: await num('ret_all_days'), default_quota_mb: await num('default_quota_mb'), messages: u.n, used: u.size });
+  }
+  if (path === '/admin/storage' && method === 'POST') {
+    const b = await body(request);
+    const rules = { temp_days: ['ret_temp_days', 3650, '保留天数'], all_days: ['ret_all_days', 3650, '保留天数'], default_quota_mb: ['default_quota_mb', 1048576, '存储上限'] };
+    for (const [k, [key, max, label]] of Object.entries(rules)) {
+      if (!(k in b)) continue;
+      const n = Number(b[k]);
+      if (!Number.isInteger(n) || n < 0 || n > max) return err(`${label}无效，请输入 0–${max} 之间的整数`);
+      await saveSetting(env, key, n ? String(n) : null);
+    }
+    return json({ ok: true, note: '已保存' });
   }
 
   // ---------- 收信规则：发到不存在地址的信 ----------

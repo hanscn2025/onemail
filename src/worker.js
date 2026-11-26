@@ -411,6 +411,26 @@ async function cleanupTrash(env) {
   await env.DB.prepare('DELETE FROM autoreply_seen WHERE at < ?').bind(Date.now() - 7 * 86400000).run();
 }
 
+// 保留期限:每天按设置删除过期邮件(已加星标的保留)。每次最多处理 300 封,剩下的第二天继续
+async function cleanupRetention(env) {
+  const tempDays = Number(await getSetting(env, 'ret_temp_days')) || 0;
+  const allDays = Number(await getSetting(env, 'ret_all_days')) || 0;
+  let budget = 300;
+  const run = async (where, cutoff) => {
+    while (budget > 0) {
+      const r = await env.DB.prepare(`SELECT id, attach_json FROM messages WHERE ${where} LIMIT 50`).bind(cutoff).all();
+      if (!r.results.length) return;
+      for (const m of r.results) {
+        await deleteMsgObjects(env, m);
+        await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(m.id).run();
+        budget--;
+      }
+    }
+  };
+  if (tempDays) await run(`starred = 0 AND folder NOT IN ('sent', 'drafts') AND date < ? AND envelope_to IN (SELECT address FROM addresses WHERE kind = 'temp')`, Date.now() - tempDays * 86400000);
+  if (allDays) await run(`starred = 0 AND folder != 'drafts' AND date < ?`, Date.now() - allDays * 86400000);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -439,6 +459,8 @@ export default {
     await receive(message, cfgEnv);
   },
   async scheduled(event, env) {
-    await cleanupTrash(await withConfig(env));
+    const cfg = await withConfig(env);
+    await cleanupTrash(cfg);
+    await cleanupRetention(cfg);
   },
 };

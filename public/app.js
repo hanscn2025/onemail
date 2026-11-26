@@ -32,6 +32,7 @@ const ICONS = {
   refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/>',
   mailopen: '<path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z"/><path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  db: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>',
   okc: '<circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/>',
   errc: '<circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/>',
   clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
@@ -1053,7 +1054,7 @@ async function pageSettings(tab = 'account') {
 // ---------- 管理中心 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号管理', 'users'], ['brand', '品牌设置', 'palette'],
-  ['send', '发信设置', 'send'], ['imap', 'IMAP 服务', 'devices'], ['logs', '记录', 'history'],
+  ['send', '发信设置', 'send'], ['storage', '存储设置', 'db'], ['imap', 'IMAP 服务', 'devices'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -1110,7 +1111,7 @@ const ADMIN = {
   },
 
   async users(el) {
-    const { items, domains } = await api('/admin/users');
+    const { items, domains, default_quota_mb: defQuota = 0 } = await api('/admin/users');
     const domain = domains[0] || '';
     $('#pgActions').innerHTML = `${searchBox('userQ', '搜索账号')}<button id="batchUsers">批量创建</button><button class="primary" id="newUser">${icon('plus')}新建账号</button>`;
     const n = (f) => items.filter(f).length;
@@ -1136,7 +1137,7 @@ const ADMIN = {
       ${u.id ? '' : `<label>地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div></label>`}
       <label>显示名称<input name="name" value="${esc(u.name || '')}" maxlength="80"></label>
       ${u.id ? '' : '<label>密码<input name="password" type="password" minlength="10" required autocomplete="new-password" placeholder="至少 10 位"></label>'}
-      <label>存储上限（MB，0 为不限）<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
+      <label>存储上限（MB，0 为不限）<input name="quota_mb" type="number" min="0" value="${u.id ? u.quota_mb || 0 : defQuota}"></label>
       ${swField({ name: 'limit_on', title: '发信限额', on: sendReady && u.send_limit > 0, off: !sendReady,
         desc: sendReady ? '限制每天可发送的邮件数量，默认不限' : '需先在「管理中心 → 发信设置」启用发信服务',
         body: `<label>每天发信上限（封）<input name="send_limit" type="number" min="1" value="${u.send_limit || 100}" data-req></label>` })}
@@ -1301,6 +1302,46 @@ const ADMIN = {
     if ($('#logoDel')) $('#logoDel').onclick = async () => {
       try { await api('/admin/brand/logo', { method: 'DELETE' }); toast('已恢复默认 Logo'); await refresh(); } catch (x) { toast(x.message, 'err'); }
     };
+  },
+
+  async storage(el) {
+    const r = await api('/admin/storage');
+    const FREE = 10 * 1024 ** 3; // Cloudflare R2 免费额度
+    const pct = Math.min(100, (r.used / FREE) * 100);
+    const gb = (n) => (n / 1024 ** 3).toFixed(n < 1024 ** 3 ? 2 : 1) + ' GB';
+    const dayField = (name, v, def) => `<label>保留天数<input name="${name}" type="number" min="1" max="3650" value="${v || def}" required></label>`;
+    el.innerHTML = `<div class="narrow-col">
+      <section class="panel">
+        <h2>存储用量</h2>
+        <div><p class="big">${fmtSize(r.used)}<span class="muted"> / 免费额度 10 GB</span></p>
+        <div class="meter"><span style="width:${Math.max(pct, r.used ? 0.5 : 0)}%"></span></div></div>
+        <p class="hint">共 ${r.messages} 封邮件。邮件正文和附件存放在 Cloudflare R2，超出免费额度后约 0.015 美元 / GB / 月。${pct >= 80 ? `已使用 ${pct.toFixed(0)}%，建议开启保留期限。` : ''}</p>
+      </section>
+      ${togglePanel({ id: 'retTemp', tag: 'form', title: '临时邮箱邮件保留期限', on: r.temp_days > 0,
+        desc: '开启后，临时邮箱收到的邮件超过保留天数自动删除，已加星标的邮件保留', body: `
+        ${dayField('days', r.temp_days, 30)}
+        <p class="hint">每天自动执行一次，删除后无法恢复。</p>
+        <div class="actions"><button class="primary" type="submit">保存</button></div>` })}
+      ${togglePanel({ id: 'retAll', tag: 'form', title: '全部邮件保留期限', on: r.all_days > 0,
+        desc: '开启后，所有邮件（含已发送）超过保留天数自动删除，已加星标的邮件和草稿保留', body: `
+        ${dayField('days', r.all_days, 365)}
+        <p class="hint">每天自动执行一次，删除后无法恢复。</p>
+        <div class="actions"><button class="primary" type="submit">保存</button></div>` })}
+      ${togglePanel({ id: 'defQuota', tag: 'form', title: '新账号默认存储上限', on: r.default_quota_mb > 0,
+        desc: '开启后，新建账号时自动填入该上限，不影响已有账号', body: `
+        <label>存储上限（MB）<input name="mb" type="number" min="1" value="${r.default_quota_mb || 1024}" required></label>
+        <p class="hint">1024 MB = 1 GB。邮箱已满时新邮件将被拒收。</p>
+        <div class="actions"><button class="primary" type="submit">保存</button></div>` })}
+    </div>`;
+    const save = async (j) => { try { const x = await api('/admin/storage', { method: 'POST', json: j }); toast(x.note); ADMIN.storage(el); return true; } catch (x) { toast(x.message, 'err'); return false; } };
+    const bind = (id, key, field, active, confirmText) => {
+      const f = $('#' + id);
+      f.onsubmit = (e) => { e.preventDefault(); save({ [key]: Number(f[field].value) }); };
+      wireToggle(f, { active, off: async () => (confirm(confirmText) ? save({ [key]: 0 }) : false) });
+    };
+    bind('retTemp', 'temp_days', 'days', r.temp_days > 0, '关闭后临时邮箱的邮件将不再自动删除。确认关闭？');
+    bind('retAll', 'all_days', 'days', r.all_days > 0, '关闭后邮件将不再按期限自动删除。确认关闭？');
+    bind('defQuota', 'default_quota_mb', 'mb', r.default_quota_mb > 0, '关闭后新建账号默认不限存储。确认关闭？');
   },
 
   async send(el) {
