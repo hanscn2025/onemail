@@ -930,8 +930,8 @@ function clientPanel() {
 
 // ---------- 个人设置：分类标签页，和管理中心同一种结构 ----------
 const SETTINGS_TABS = [
-  ['account', '账户', 'user'], ['security', '安全', 'shield'], ['forward', '转发设置', 'forward'], ['autoreply', '自动回复', 'autoreply'],
-  ['notify', '通知', 'bell'], ['storage', '存储设置', 'db', true], ['client', '客户端', 'devices'],
+  ['account', '账户', 'user'], ['security', '安全', 'shield'], ['forward', '转发设置', 'forward'], ['storage', '存储设置', 'db', true],
+  ['autoreply', '自动回复', 'autoreply'], ['notify', '通知', 'bell'], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
   // 「客户端」只在管理员启用 IMAP 服务后出现:没有 IMAP 时客户端收不到信,配置没有意义
