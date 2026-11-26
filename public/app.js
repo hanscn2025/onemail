@@ -798,31 +798,24 @@ function tempRows(items, showOwner, reload) {
     const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : badge('ok', '使用中');
     const to = a.auto ? defaultChips() : a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '');
     const exp = a.expires_at ? (expired ? '已过期' : `${fmtDay(a.expires_at)} 到期`) : '永久';
-    return `<tr data-row data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
+    return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
       <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
       <td>${to}</td>
       <td>${st}<div class="muted sm">${exp}</div></td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
-      ${rowCols(`<button class="lnk" data-view="${esc(a.address)}" data-owner="${esc(a.owner || '')}">查看</button>`, [
-        ['编辑', 'edit', `data-tedit="${esc(a.address)}"`],
-        [a.enabled ? '停用' : '启用', 'power', `data-ttoggle="${esc(a.address)}" data-on="${a.enabled}"`],
-        ['删除', 'trash', `data-tdel="${esc(a.address)}"`, true],
-      ])}</tr>`;
+      <td class="op"><div class="op-links">
+        <button type="button" class="lnk" data-tedit="${esc(a.address)}">编辑</button>
+        <button type="button" class="lnk" data-ttoggle="${esc(a.address)}" data-on="${a.enabled}">${a.enabled ? '停用' : '启用'}</button>
+        <button type="button" class="lnk danger" data-tdel="${esc(a.address)}">删除</button>
+      </div></td></tr>`;
   }).join('');
   setTimeout(() => wireTemp(items, reload));
-  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th class="op">操作</th><th class="acts" aria-label="更多操作"></th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
+  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th class="op">操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
 }
 
 function wireTemp(items, reload) {
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
-  $$('[data-view]', page).forEach((b) => (b.onclick = () => {
-    closePage();
-    state.folder = 'inbox'; state.rcpt = b.dataset.view; state.q = ''; $('#search').value = '';
-    if (state.me.is_admin && b.dataset.owner && b.dataset.owner !== state.me.address) { state.box = b.dataset.owner; $('#boxSel').value = state.box; }
-    else state.box = state.me.address;
-    location.hash = 'inbox'; closeReader(); loadList();
-  }));
   $$('[data-ttoggle]', page).forEach((b) => (b.onclick = async () => {
     try { await api(`/temp/${encodeURIComponent(b.dataset.ttoggle)}`, { method: 'PATCH', json: { enabled: b.dataset.on !== '1' } }); reload(); } catch (x) { toast(x.message); }
   }));
