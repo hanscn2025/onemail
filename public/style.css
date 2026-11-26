@@ -629,3 +629,5 @@ label.off input:disabled { color: var(--muted); cursor: not-allowed; }
 .sw-line strong { font-weight: 600; }
 .sw-line .switch { min-height: 0; flex: none; }
 .sw-body { display: flex; flex-direction: column; gap: var(--s4); }
+.sw-field.off .sw-line strong { color: var(--muted); }
+.sw-field.off .switch { opacity: .5; cursor: not-allowed; }

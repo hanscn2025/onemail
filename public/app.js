@@ -618,6 +618,15 @@ function fwdModeField(mode = 'cf', name = 'fwd_mode') {
     </div></div>`;
 }
 
+// 表单里的开关字段:关着只显示标题和说明;off = 未配置,开关置灰不可用
+function swField({ name, title, desc, on, off = false, body }) {
+  return `<div class="sw-field ${off ? 'off' : ''}">
+    <div class="sw-line"><div><strong>${title}</strong><span class="muted sm">${desc}</span></div>
+      <label class="switch" title="${off ? '暂不可用' : title}"><input type="checkbox" name="${name}" data-sw ${on && !off ? 'checked' : ''} ${off ? 'disabled' : ''}><span class="track"></span></label></div>
+    <div class="sw-body ${on && !off ? '' : 'hidden'}">${body}</div>
+  </div>`;
+}
+
 // 开关块:右上角一个开关;关着只显示标题和一句说明,打开才展开配置
 function togglePanel({ id, title, desc, on, body, tag = 'section', attrs = '', locked = false }) {
   return `<${tag} class="panel tpanel" id="${id}" ${attrs}>
@@ -1122,35 +1131,36 @@ const ADMIN = {
         ])}</tr>`).join('')}</tbody></table></div>${tblFoot(items.length, '个账号')}</div>`;
     const reload = () => ADMIN.users(el);
     wireList($('#userRows'), { searchEl: $('#userQ'), sortEl: $('#sortSel', el) });
-    const userFields = (u = {}) => `
+    // 「发信服务已启用」与「发信设置」页一致:以 Resend 是否配置为准
+    const userFields = (u = {}, sendReady = !!state.me.can_resend) => `
       ${u.id ? '' : `<label>地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div></label>`}
       <label>显示名称<input name="name" value="${esc(u.name || '')}" maxlength="80"></label>
       ${u.id ? '' : '<label>密码<input name="password" type="password" minlength="10" required autocomplete="new-password" placeholder="至少 10 位"></label>'}
-      <div class="form-grid">
-        <label>存储上限（MB，0 为不限）<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
-        ${state.me.can_send
-          ? `<label>每天发信上限（0 为不限）<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>`
-          : `<label class="off">每天发信上限<input type="text" value="需先启用发信服务" disabled title="在「管理中心 → 发信设置」启用后可设置"><input type="hidden" name="send_limit" value="${u.send_limit || 0}"></label>`}
-      </div>
-      <div class="sw-field">
-        <div class="sw-line"><div><strong>转发</strong><span class="muted sm">将收到的邮件同时转发到其他邮箱，默认不转发</span></div>
-          <label class="switch" title="转发"><input type="checkbox" name="fwd_on" data-fwdsw ${u.fwd_to ? 'checked' : ''}><span class="track"></span></label></div>
-        <div class="sw-body ${u.fwd_to ? '' : 'hidden'}">
-          <label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com" ${u.fwd_to ? 'required' : ''}></label>
-          ${fwdModeField(u.fwd_mode)}
-        </div>
-      </div>
+      <label>存储上限（MB，0 为不限）<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
+      ${swField({ name: 'limit_on', title: '发信限额', on: sendReady && u.send_limit > 0, off: !sendReady,
+        desc: sendReady ? '限制每天可发送的邮件数量，默认不限' : '需先在「管理中心 → 发信设置」启用发信服务',
+        body: `<label>每天发信上限（封）<input name="send_limit" type="number" min="1" value="${u.send_limit || 100}" data-req></label>` })}
+      ${sendReady ? '' : `<input type="hidden" name="send_limit_keep" value="${u.send_limit || 0}">`}
+      ${swField({ name: 'fwd_on', title: '转发', on: !!u.fwd_to, desc: '将收到的邮件同时转发到其他邮箱，默认不转发',
+        body: `<label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com" data-req></label>
+          ${fwdModeField(u.fwd_mode)}` })}
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
       ${u.id ? `<label class="check"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}> 停用这个账号（不能登录，发来的信会被退回）</label>` : ''}`;
-    const wireFwdSw = () => {
-      const cb = $('#editBody [data-fwdsw]'), body = $('#editBody .sw-body'), to = $('#editBody [name=fwd_to]');
-      cb.onchange = () => { body.classList.toggle('hidden', !cb.checked); to.required = cb.checked; if (cb.checked) to.focus(); };
-    };
-    const fwdOf = (f) => (f.get('fwd_on') === 'on' ? { fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf' } : { fwd_to: '', fwd_mode: 'cf' });
+    const wireFwdSw = () => $$('#editBody .sw-field').forEach((w) => {
+      const cb = $('[data-sw]', w), body = $('.sw-body', w);
+      const sync = () => { body.classList.toggle('hidden', !cb.checked); $$('[data-req]', body).forEach((i) => (i.required = cb.checked)); };
+      sync();
+      cb.onchange = () => { sync(); if (cb.checked) $('input[data-req]', body)?.focus(); };
+    });
+    const fwdOf = (f, sendReady = !!state.me.can_resend) => ({
+      ...(f.get('fwd_on') === 'on' ? { fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf' } : { fwd_to: '', fwd_mode: 'cf' }),
+      // 发信未启用时开关不可用,保留原值
+      send_limit: sendReady ? (f.get('limit_on') === 'on' ? Number(f.get('send_limit')) : 0) : Number(f.get('send_limit_keep') || 0),
+    });
     $('#newUser').onclick = () => { editDialog('新建账号', userFields(), async (f) => {
       await api('/admin/users', { method: 'POST', json: {
         address: `${String(f.get('local')).trim().toLowerCase()}@${domain}`, name: f.get('name'), password: f.get('password'),
-        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), ...fwdOf(f),
+        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), ...fwdOf(f),
       } });
       toast('已创建'); reload();
     }, '创建'); wireFwdSw(); };
@@ -1158,7 +1168,7 @@ const ADMIN = {
       const u = items.find((x) => String(x.id) === b.dataset.uedit);
       editDialog(`编辑 ${u.address}`, userFields(u), async (f) => {
         await api(`/admin/users/${u.id}`, { method: 'PATCH', json: {
-          name: f.get('name'), quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), ...fwdOf(f),
+          name: f.get('name'), quota_mb: Number(f.get('quota_mb')), ...fwdOf(f),
           is_admin: f.get('is_admin') === 'on', disabled: f.get('disabled') === 'on',
         } });
         toast('已保存'); reload();
