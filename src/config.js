@@ -111,6 +111,9 @@ let cached = null;
 let cachedAt = 0;
 const CACHE_MS = 30_000; // 别的实例改了设置(比如填了发信 Key),最多 30 秒后这里也能读到
 
+// IMAP 网关尚未正式发布:未开放前一律按未启用处理(后台开关置灰、客户端设置隐藏、网关接口拒绝)
+export const IMAP_RELEASED = false;
+
 let imapReady = false;
 // 第一次打开 IMAP 服务时调用；之后每次冷启动由 ensureSchema 检查
 export async function ensureImapSchema(env) {
@@ -164,7 +167,7 @@ async function loadConfig(env) {
     tgBot: s.tg_bot || '',
     tgSecret: s.tg_secret || '',
     appUrl: s.app_url || '',
-    imapOn: s.imap_on === '1',
+    imapOn: IMAP_RELEASED && s.imap_on === '1',
     imapHost: s.imap_host || '',
     imapKey: s.imap_gw_key || '',
     catchAllLocked: env.CATCH_ALL !== undefined,

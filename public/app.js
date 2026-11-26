@@ -1313,6 +1313,15 @@ const ADMIN = {
   // IMAP 服务(可选):网关部署在管理员自己的服务器上，这里填网关地址、拿密钥、测试连接
   async imap(el) {
     const r = await api('/admin/imap');
+    if (!r.released) {
+      // 网关未发布:整块置灰,开关不可操作
+      el.innerHTML = `<div class="narrow-col"><section class="panel tpanel unavailable" id="imapPanel">
+        <div class="t-head"><div class="t-title"><h2>IMAP 服务${badge('neutral', '即将推出')}</h2>
+          <p class="hint">为 Foxmail、Outlook 等邮件客户端提供 IMAP 收信。功能开发中，暂未开放</p></div>
+          <label class="switch" title="暂未开放"><input type="checkbox" disabled><span class="track"></span></label></div>
+      </section></div>`;
+      return;
+    }
     const seen = r.seen && r.seen.at;
     const online = seen && Date.now() - r.seen.at < 15 * 60 * 1000;
     const status = !r.on ? '' : online

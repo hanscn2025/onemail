@@ -4,7 +4,7 @@
 import PostalMime from 'postal-mime';
 import { connect } from 'cloudflare:sockets';
 import { verifyPassword, makeToken, userFromToken, checkLocked, recordFail, clearFail, timingSafeEqual } from './auth.js';
-import { saveSetting, getSetting, ensureImapSchema } from './config.js';
+import { saveSetting, getSetting, ensureImapSchema, IMAP_RELEASED } from './config.js';
 import { addLog, store } from './mail.js';
 
 const json = (data, status = 200) =>
@@ -313,7 +313,7 @@ async function probe(host) {
 
 export async function imapAdmin(path, method, request, env) {
   if (path === '/admin/imap' && method === 'GET') {
-    return json({ on: !!env.IMAP_ON, host: env.IMAP_HOST || '', key: env.IMAP_KEY || '', seen: seenInfo(await getSetting(env, 'imap_gw_seen')) });
+    return json({ released: IMAP_RELEASED, on: !!env.IMAP_ON, host: env.IMAP_HOST || '', key: env.IMAP_KEY || '', seen: seenInfo(await getSetting(env, 'imap_gw_seen')) });
   }
   if (path === '/admin/imap' && method === 'POST') {
     const b = await request.json().catch(() => ({}));
@@ -322,6 +322,7 @@ export async function imapAdmin(path, method, request, env) {
       for (const k of ['imap_on', 'imap_gw_key', 'imap_gw_seen']) await saveSetting(env, k, null);
       return json({ ok: true, note: '已停用 IMAP 服务' });
     }
+    if (!IMAP_RELEASED) return err('IMAP 服务尚未开放');
     const host = String(b.host || '').trim().toLowerCase().replace(/^imaps?:\/\//, '').replace(/\/.*$/, '');
     if (!HOST_RE.test(host)) return err('网关地址格式无效，例如 imap.example.com');
     await ensureImapSchema(env); // 第一次启用时给信件加 UID(之前没开过的部署不建这些表和触发器)
