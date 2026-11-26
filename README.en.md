@@ -8,7 +8,7 @@ A webmail that runs entirely on Cloudflare. Mail sent to `anything@your-domain` 
 - **Temporary addresses**: write any prefix when signing up and it receives mail; after its first message it appears in the temporary address list, where you can add a note, set an expiry or disable it (later mail bounces). Where this mail goes is one global setting: the admin mailbox by default, or a custom mailbox such as Gmail. Admins can turn off "receive at any prefix"; then only temporary addresses you created receive mail
 - **Business-style accounts**: separate accounts for family or teammates; each person signs in, sends and receives, and sees only their own mail. Bulk creation is supported
 - **Full mail features**: compose, reply, forward, drafts, signature, auto-reply, forwarding to an external mailbox; replies default to the address the mail was sent to
-- **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), branding, sending setup, storage (mail retention and a default quota for new accounts, both off by default), and login / delivery / sending logs
+- **Admin console**: overview stats, accounts (disable, storage quota, daily send limit, password reset, sign out everywhere), branding, sending setup, and login / delivery / sending logs; admins also get Settings → Storage for mail retention and a default quota for new accounts (both off by default)
 - Remote images are blocked by default (anti-tracking), HTML mail is rendered in a sandbox, and trash is emptied after 30 days
 - `name+anything@domain` goes to the same mailbox
 

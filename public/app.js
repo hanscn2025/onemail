@@ -485,6 +485,7 @@ async function openPage(name) {
   if (name === 'settings/temp' || name === 'admin/temps') name = 'temp';
   if (name === 'admin/addresses') name = 'admin/overview';
   if (name === 'admin/notify') name = 'settings/notify';
+  if (name === 'admin/storage') name = 'settings/storage';
   const [base, tab] = name.split('/');
   if (!PAGES[base]) return;
   $('#app').classList.add('paging'); $('#app').classList.remove('menu', 'reading');
@@ -930,7 +931,7 @@ function clientPanel() {
 // ---------- 个人设置：分类标签页，和管理中心同一种结构 ----------
 const SETTINGS_TABS = [
   ['account', '账户', 'user'], ['security', '安全', 'shield'], ['forward', '转发设置', 'forward'], ['autoreply', '自动回复', 'autoreply'],
-  ['notify', '通知', 'bell'], ['client', '客户端', 'devices'],
+  ['notify', '通知', 'bell'], ['storage', '存储设置', 'db', true], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
   // 「客户端」只在管理员启用 IMAP 服务后出现:没有 IMAP 时客户端收不到信,配置没有意义
@@ -982,12 +983,14 @@ async function pageSettings(tab = 'account') {
     </form>`,
     client: clientPanel(),
     notify: tgPanel(s, tg),
+    storage: '',
   }[tab];
   page.innerHTML = `<div class="pg-col">${head('设置')}
   <div class="blk tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
   <div class="pg-stack">${body}</div></div>`;
   wire();
   wireTgBot();
+  if (tab === 'storage') ADMIN.storage($('.pg-stack', page));
   $$('[data-stab]', page).forEach((a) => (a.onclick = () => openPage('settings/' + a.dataset.stab)));
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
   if ($('[data-goto-send]', page)) $('[data-goto-send]', page).onclick = () => openPage('admin/send');
@@ -1054,7 +1057,7 @@ async function pageSettings(tab = 'account') {
 // ---------- 管理中心 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号管理', 'users'], ['brand', '品牌设置', 'palette'],
-  ['send', '发信设置', 'send'], ['storage', '存储设置', 'db'], ['imap', 'IMAP 服务', 'devices'], ['logs', '记录', 'history'],
+  ['send', '发信设置', 'send'], ['imap', 'IMAP 服务', 'devices'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -1310,7 +1313,7 @@ const ADMIN = {
     const pct = Math.min(100, (r.used / FREE) * 100);
     const gb = (n) => (n / 1024 ** 3).toFixed(n < 1024 ** 3 ? 2 : 1) + ' GB';
     const dayField = (name, v, def) => `<label>保留天数<input name="${name}" type="number" min="1" max="3650" value="${v || def}" required></label>`;
-    el.innerHTML = `<div class="narrow-col">
+    el.innerHTML = `
       <section class="panel">
         <h2>存储用量</h2>
         <div><p class="big">${fmtSize(r.used)}<span class="muted"> / 免费额度 10 GB</span></p>
@@ -1331,8 +1334,7 @@ const ADMIN = {
         desc: '开启后，新建账号时自动填入该上限，不影响已有账号', body: `
         <label>存储上限（MB）<input name="mb" type="number" min="1" value="${r.default_quota_mb || 1024}" required></label>
         <p class="hint">1024 MB = 1 GB。邮箱已满时新邮件将被拒收。</p>
-        <div class="actions"><button class="primary" type="submit">保存</button></div>` })}
-    </div>`;
+        <div class="actions"><button class="primary" type="submit">保存</button></div>` })}`;
     const save = async (j) => { try { const x = await api('/admin/storage', { method: 'POST', json: j }); toast(x.note); ADMIN.storage(el); return true; } catch (x) { toast(x.message, 'err'); return false; } };
     const bind = (id, key, field, active, confirmText) => {
       const f = $('#' + id);
