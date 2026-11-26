@@ -622,6 +622,57 @@ function wireToggle(panel, { active, off } = {}) {
   };
 }
 
+// Telegram 通知:一块。机器人(全系统一个,管理员配置)+ 自己的绑定
+function tgBotForm(r) {
+  // 不用 <form>:绑定后整块是表单,不能嵌套
+  return `<div class="inline-form">
+      <input id="tgToken" type="password" placeholder="${r && r.bot ? '输入新的 Bot Token' : 'Bot Token，例如 123456789:AAH…'}" autocomplete="off">
+      <button class="primary" type="button" id="tgSave">保存</button>
+    </div>
+    <ol class="steps">
+      <li>在 Telegram 中打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>，发送 <code>/newbot</code> 创建机器人</li>
+      <li>将返回的 Bot Token 填入上方并保存</li>
+    </ol>`;
+}
+function tgPanel(s, r) {
+  const admin = !!r;
+  const desc = '新邮件到达时推送至 Telegram';
+  // 管理员看到的机器人信息行
+  const botLine = admin && r.bot ? `<div class="tg-bot">
+      <span class="muted">机器人 @${esc(r.bot)} · 已绑定 ${r.bound} 个账号</span>
+      <button type="button" class="lnk" id="tgChange">更换 Token</button>
+      <button type="button" class="lnk danger" id="tgClear">停用机器人</button>
+    </div>
+    <div class="hidden" id="tgChangeBox">${tgBotForm(r)}</div>` : '';
+  if (!s.tg_bot) {
+    if (!admin) return togglePanel({ id: 'tgUser', title: 'Telegram 通知', on: false, locked: true, body: '', desc: '管理员尚未配置 Telegram 机器人' });
+    return togglePanel({ id: 'tgUser', title: 'Telegram 通知', desc, on: false, body: `
+      <p class="hint">首次使用需配置 Telegram 机器人，全系统只需配置一次。</p>
+      ${tgBotForm(r)}` });
+  }
+  if (!s.tg_bound) return togglePanel({ id: 'tgUser', title: 'Telegram 通知', desc, on: false, body: `
+      <p class="hint">点击「绑定 Telegram」后，在机器人对话中点击「开始」完成绑定。</p>
+      <div class="btn-row"><button class="primary" type="button" id="tgBind">绑定 Telegram</button></div>
+      <p class="muted sm hidden" id="tgWait">等待 Telegram 确认，完成后页面将自动刷新。</p>
+      ${botLine}` });
+  return togglePanel({ id: 'tgUser', tag: 'form', attrs: 'data-sec', title: 'Telegram 通知', desc, on: true, body: `
+      <p class="status-line">${badge('ok', '已绑定')}${admin ? '' : `<span class="muted">机器人 @${esc(s.tg_bot)}</span>`}</p>
+      <label class="check"><input type="checkbox" name="tg_body" ${s.tg_body ? 'checked' : ''}> 推送正文摘要</label>
+      <label class="check"><input type="checkbox" name="tg_bulk" ${s.tg_bulk ? 'checked' : ''}> 推送群发及订阅类邮件</label>
+      ${botLine}
+      <div class="actions"><button class="primary" type="submit">保存</button><button type="button" id="tgTest">发送测试消息</button></div>` });
+}
+function wireTgBot() {
+  const save = async (token) => {
+    try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); pageSettings('notify'); } catch (x) { toast(x.message); }
+  };
+  const go = () => { const t = $('#tgToken').value.trim(); if (t) save(t); else $('#tgToken').focus(); };
+  if ($('#tgSave')) $('#tgSave').onclick = go;
+  if ($('#tgToken')) $('#tgToken').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+  if ($('#tgChange')) $('#tgChange').onclick = () => { $('#tgChangeBox').classList.toggle('hidden'); $('#tgChangeBox input')?.focus(); };
+  if ($('#tgClear')) $('#tgClear').onclick = () => { if (confirm('停用后将解除所有账号的 Telegram 绑定。确认停用？')) save(''); };
+}
+
 // 转发状态:看最近一次转发记录;可以发测试信验证;直接转发要在 Cloudflare 验证目标邮箱
 const CF_ROUTING = 'https://dash.cloudflare.com/?to=/:account/:zone/email/routing/overview';
 function fwdStatusPanel(s) {
@@ -861,6 +912,7 @@ async function pageSettings(tab = 'account') {
   const tabs = SETTINGS_TABS.filter((t) => !t[3] || state.me.is_admin);
   if (!tabs.some((t) => t[0] === tab)) tab = 'account';
   const s = await api('/settings');
+  const tg = tab === 'notify' && state.me.is_admin ? await api('/admin/telegram') : null;
   const pct = s.quota_mb ? Math.min(100, (s.used / (s.quota_mb * 1048576)) * 100) : 0;
   const body = {
     account: `
@@ -904,25 +956,13 @@ async function pageSettings(tab = 'account') {
       <div class="actions"><button class="primary" type="submit">保存</button></div>
     </form>`,
     client: clientPanel(),
-    notify: !s.tg_bot
-      ? togglePanel({ id: 'tgUser', title: 'Telegram 通知', on: false, locked: true, body: '',
-        desc: state.me.is_admin ? '请先启用上方的 Telegram 机器人' : '管理员尚未配置 Telegram 机器人' })
-      : !s.tg_bound
-        ? togglePanel({ id: 'tgUser', title: 'Telegram 通知', desc: '新邮件到达时推送至 Telegram', on: false, body: `
-          <p class="hint">点击「绑定 Telegram」后，在机器人对话中点击「开始」完成绑定。</p>
-          <div class="actions"><button class="primary" type="button" id="tgBind">绑定 Telegram</button></div>
-          <p class="muted sm hidden" id="tgWait">等待 Telegram 确认，完成后页面将自动刷新。</p>` })
-        : togglePanel({ id: 'tgUser', tag: 'form', attrs: 'data-sec', title: 'Telegram 通知', desc: '新邮件到达时推送至 Telegram', on: true, body: `
-          <p class="status-line">${badge('ok', '已绑定')}<span class="muted">机器人 @${esc(s.tg_bot)}</span></p>
-          <label class="check"><input type="checkbox" name="tg_body" ${s.tg_body ? 'checked' : ''}> 推送正文摘要</label>
-          <label class="check"><input type="checkbox" name="tg_bulk" ${s.tg_bulk ? 'checked' : ''}> 推送群发及订阅类邮件</label>
-          <div class="actions"><button class="primary" type="submit">保存</button><button type="button" id="tgTest">发送测试消息</button></div>` }),
+    notify: tgPanel(s, tg),
   }[tab];
   page.innerHTML = `<div class="pg-col">${head('设置')}
   <div class="blk tabs" role="tablist">${tabs.map(([k, t, ic]) => `<a data-stab="${k}" class="${k === tab ? 'on' : ''}">${icon(ic, 'sm')}${t}</a>`).join('')}</div>
-  <div class="pg-stack">${tab === 'notify' && state.me.is_admin ? '<div id="tgAdmin" class="pg-stack"></div>' : ''}${body}</div></div>`;
+  <div class="pg-stack">${body}</div></div>`;
   wire();
-  if ($('#tgAdmin')) await ADMIN.notify($('#tgAdmin'));
+  wireTgBot();
   $$('[data-stab]', page).forEach((a) => (a.onclick = () => openPage('settings/' + a.dataset.stab)));
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
   if ($('[data-goto-send]', page)) $('[data-goto-send]', page).onclick = () => openPage('admin/send');
@@ -1250,29 +1290,6 @@ const ADMIN = {
     $('#resendForm2').onsubmit = (e) => { e.preventDefault(); const k = e.target.key.value.trim(); if (k) save(k); };
     wireToggle($('#sendPanel'), { active: r.source === 'settings', off: async () => {
       if (!confirm('停用后将无法发信。确认停用？')) return false;
-      await save(''); return true;
-    } });
-  },
-
-  async notify(el) {
-    const r = await api('/admin/telegram');
-    el.innerHTML = togglePanel({ id: 'tgBot', title: 'Telegram 机器人 <span class="count">管理员</span>', on: !!r.bot,
-      desc: '启用后，各账号可绑定自己的 Telegram 接收通知', body: `
-      ${r.bot ? `<p class="status-line">${badge('ok', '已连接')}<span class="muted">@${esc(r.bot)} · 已绑定 ${r.bound} 个账号</span></p>` : ''}
-      <form id="tgForm" class="inline-form">
-        <input name="token" type="password" placeholder="${r.bot ? '输入新的 Bot Token' : 'Bot Token，例如 123456789:AAH…'}" autocomplete="off">
-        <button class="primary" type="submit">保存</button>
-      </form>
-      <ol class="steps">
-        <li>在 Telegram 中打开 <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>，发送 <code>/newbot</code> 创建机器人</li>
-        <li>将返回的 Bot Token 填入上方并保存</li>
-      </ol>` });
-    const save = async (token) => {
-      try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); pageSettings('notify'); } catch (x) { toast(x.message); }
-    };
-    $('#tgForm').onsubmit = (e) => { e.preventDefault(); const t = e.target.token.value.trim(); if (t) save(t); };
-    wireToggle($('#tgBot'), { active: !!r.bot, off: async () => {
-      if (!confirm('停用后将解除所有账号的 Telegram 绑定。确认停用？')) return false;
       await save(''); return true;
     } });
   },

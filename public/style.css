@@ -593,3 +593,11 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
   padding: var(--s1) var(--s2); border-radius: var(--r); background: #242424; color: #fff;
   font-size: var(--fs-xs); line-height: var(--lh-xs); font-weight: 400; white-space: nowrap; pointer-events: none;
 }
+/* Telegram:管理员看到的机器人信息行 */
+.tg-bot { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; padding-top: var(--s4); border-top: 1px solid var(--line-soft); }
+.tg-bot .lnk { margin-right: 0; }
+#tgChangeBox { display: grid; gap: var(--s4); }
+#tgChangeBox.hidden { display: none; }
+/* 块内普通按钮行(不是底部按钮栏) */
+.btn-row { display: flex; align-items: center; gap: var(--s2); }
+.t-body > .tg-bot { max-width: none; }
