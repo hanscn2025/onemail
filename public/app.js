@@ -927,7 +927,8 @@ const SETTINGS_TABS = [
   ['notify', '通知', 'bell'], ['client', '客户端', 'devices'],
 ];
 async function pageSettings(tab = 'account') {
-  const tabs = SETTINGS_TABS.filter((t) => !t[3] || state.me.is_admin);
+  // 「客户端」只在管理员启用 IMAP 服务后出现:没有 IMAP 时客户端收不到信,配置没有意义
+  const tabs = SETTINGS_TABS.filter((t) => (!t[3] || state.me.is_admin) && (t[0] !== 'client' || state.me.imap));
   if (!tabs.some((t) => t[0] === tab)) tab = 'account';
   const s = await api('/settings');
   const tg = tab === 'notify' && state.me.is_admin ? await api('/admin/telegram') : null;
