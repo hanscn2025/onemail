@@ -32,6 +32,8 @@ const ICONS = {
   refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/>',
   mailopen: '<path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z"/><path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 10"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  okc: '<circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/>',
+  errc: '<circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/>',
   clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
   reply: '<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
   replyall: '<path d="m7 17-5-5 5-5"/><path d="m12 17-5-5 5-5"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/>',
@@ -102,9 +104,13 @@ async function api(path, opts = {}) {
 const boxQ = () => (state.box && state.box !== state.me.address ? `mailbox=${encodeURIComponent(state.box)}` : '');
 const withBox = (p) => { const b = boxQ(); return b ? p + (p.includes('?') ? '&' : '?') + b : p; };
 
-function toast(msg) {
-  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600);
+// 全站操作反馈:顶部居中;type = 'ok' 成功(默认)/ 'err' 失败
+function toast(msg, type = 'ok') {
+  const t = $('#toast');
+  t.className = `toast ${type}`;
+  t.innerHTML = `${icon(type === 'err' ? 'errc' : 'okc')}<span>${esc(msg)}</span>`;
+  requestAnimationFrame(() => t.classList.add('show'));
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), type === 'err' ? 4000 : 2600);
 }
 
 function fmtDate(ms, full) {
@@ -208,7 +214,7 @@ async function loadList(more) {
     const { items } = await api(withBox('/messages?' + p));
     state.items = more ? state.items.concat(items) : items;
     state.done = items.length < 50;
-  } catch (x) { toast(x.message); }
+  } catch (x) { toast(x.message, 'err'); }
   renderList(); loadCounts(); if (!more) loadRecipients();
   // 按收件地址筛选时,列表顶部明确提示,一键取消
   const bar = $('#rcptBar');
@@ -264,7 +270,7 @@ async function toggleStar(id) {
   const m = state.items.find((x) => String(x.id) === String(id));
   if (!m) return;
   const on = !m.starred;
-  try { await api(`/messages/${m.id}`, { method: 'PATCH', json: { starred: on } }); } catch (x) { toast(x.message); return; }
+  try { await api(`/messages/${m.id}`, { method: 'PATCH', json: { starred: on } }); } catch (x) { toast(x.message, 'err'); return; }
   m.starred = on ? 1 : 0;
   if (state.folder === 'starred' && !on) state.items = state.items.filter((x) => x !== m);
   renderList();
@@ -284,7 +290,7 @@ function closeReader() {
 
 async function openMsg(id, showImages = false) {
   let m;
-  try { m = await api(`/messages/${id}`); } catch (x) { toast(x.message); return; }
+  try { m = await api(`/messages/${id}`); } catch (x) { toast(x.message, 'err'); return; }
   state.cur = m;
   const it = state.items.find((x) => x.id === id); if (it) it.seen = 1;
   renderList(); loadCounts();
@@ -360,7 +366,7 @@ async function act(a) {
     if (a === 'restore') { await api(`/messages/${m.id}`, { method: 'PATCH', json: { folder: 'restore' } }); toast('已移回'); }
     if (a === 'destroy') { if (!confirm('永久删除后无法恢复。确认删除？')) return; await api(`/messages/${m.id}`, { method: 'DELETE' }); toast('已删除'); }
     closeReader(); loadList();
-  } catch (x) { toast(x.message); }
+  } catch (x) { toast(x.message, 'err'); }
 }
 
 // ---------- 写信 ----------
@@ -432,7 +438,7 @@ function openCompose(kind, m) {
 }
 
 async function openDraft(id) {
-  try { openCompose('draft', await api(`/messages/${id}`)); } catch (x) { toast(x.message); }
+  try { openCompose('draft', await api(`/messages/${id}`)); } catch (x) { toast(x.message, 'err'); }
 }
 
 $('#draftBtn').onclick = async () => {
@@ -485,7 +491,7 @@ async function openPage(name) {
   $$('#folders a').forEach((a) => a.classList.remove('on'));
   $$('[data-p]').forEach((a) => a.classList.toggle('on', a.dataset.p === base));
   if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
-  try { await PAGES[base](tab); } catch (x) { toast(x.message); }
+  try { await PAGES[base](tab); } catch (x) { toast(x.message, 'err'); }
 }
 $$('[data-p]').forEach((a) => (a.onclick = () => openPage(a.dataset.p)));
 // 侧栏收起时悬停显示名称
@@ -673,7 +679,7 @@ function tgPanel(s, r) {
 }
 function wireTgBot() {
   const save = async (token) => {
-    try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); pageSettings('notify'); } catch (x) { toast(x.message); }
+    try { const x = await api('/admin/telegram', { method: 'POST', json: { token } }); toast(x.note); pageSettings('notify'); } catch (x) { toast(x.message, 'err'); }
   };
   const go = () => { const t = $('#tgToken').value.trim(); if (t) save(t); else $('#tgToken').focus(); };
   if ($('#tgSave')) $('#tgSave').onclick = go;
@@ -745,7 +751,7 @@ function wireTempTarget(bar, r, after) {
       await api('/admin/routing', { method: 'POST', json: { catch_all_on: on } });
       toast(on ? '已启用任意前缀收信' : '已停用任意前缀收信，30 秒内生效');
       if (after) await after();
-    } catch (x) { toast(x.message); cb.checked = !on; }
+    } catch (x) { toast(x.message, 'err'); cb.checked = !on; }
   };
   const edit = $('[data-edit-target]', bar);
   if (edit) edit.onclick = () => {
@@ -814,11 +820,11 @@ function tempRows(items, showOwner, reload) {
 function wireTemp(items, reload) {
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
   $$('[data-ttoggle]', page).forEach((b) => (b.onchange = async () => {
-    try { await api(`/temp/${encodeURIComponent(b.dataset.ttoggle)}`, { method: 'PATCH', json: { enabled: b.checked } }); toast(b.checked ? '已启用' : '已停用'); reload(); } catch (x) { b.checked = !b.checked; toast(x.message); }
+    try { await api(`/temp/${encodeURIComponent(b.dataset.ttoggle)}`, { method: 'PATCH', json: { enabled: b.checked } }); toast(b.checked ? '已启用' : '已停用'); reload(); } catch (x) { b.checked = !b.checked; toast(x.message, 'err'); }
   }));
   $$('[data-tdel]', page).forEach((b) => (b.onclick = async () => {
     if (!confirm(`确认删除 ${b.dataset.tdel}？已收到的邮件将保留。`)) return;
-    try { await api(`/temp/${encodeURIComponent(b.dataset.tdel)}`, { method: 'DELETE' }); reload(); } catch (x) { toast(x.message); }
+    try { await api(`/temp/${encodeURIComponent(b.dataset.tdel)}`, { method: 'DELETE' }); reload(); } catch (x) { toast(x.message, 'err'); }
   }));
   $$('[data-tedit]', page).forEach((b) => (b.onclick = () => {
     const a = items.find((x) => x.address === b.dataset.tedit);
@@ -980,7 +986,7 @@ async function pageSettings(tab = 'account') {
     try {
       const { url } = await api('/tg/link', { method: 'POST' });
       if (w) w.location = url; else location.href = url;
-    } catch (x) { if (w) w.close(); toast(x.message); return; }
+    } catch (x) { if (w) w.close(); toast(x.message, 'err'); return; }
     $('#tgWait').classList.remove('hidden');
     let n = 0;
     const t = setInterval(async () => {
@@ -1002,18 +1008,18 @@ async function pageSettings(tab = 'account') {
         if (x?.fwd_status && x.fwd_status.at >= at) { toast(x.fwd_status.ok ? '转发成功' : '转发失败，详见转发状态'); pageSettings('forward'); return; }
       }
       toast('1 分钟内未收到转发结果，请稍后刷新或在「记录」中查看'); pageSettings('forward');
-    } catch (x) { toast(x.message); b.disabled = false; b.textContent = '发送测试邮件'; }
+    } catch (x) { toast(x.message, 'err'); b.disabled = false; b.textContent = '发送测试邮件'; }
   };
   if ($('#tgTest')) $('#tgTest').onclick = async () => {
-    try { await api('/tg/test', { method: 'POST' }); toast('测试消息已发送'); } catch (x) { toast(x.message); }
+    try { await api('/tg/test', { method: 'POST' }); toast('测试消息已发送'); } catch (x) { toast(x.message, 'err'); }
   };
   wireToggle($('#fwdPanel'), { active: !!s.fwd_to, off: async () => {
     if (!confirm('关闭后将停止转发。确认关闭？')) return false;
-    try { await api('/settings', { method: 'POST', json: { fwd_to: '' } }); toast('已关闭转发'); pageSettings('forward'); return true; } catch (x) { toast(x.message); return false; }
+    try { await api('/settings', { method: 'POST', json: { fwd_to: '' } }); toast('已关闭转发'); pageSettings('forward'); return true; } catch (x) { toast(x.message, 'err'); return false; }
   } });
   wireToggle($('#tgUser'), { active: !!s.tg_bound, off: async () => {
     if (!confirm('解除绑定后将停止推送。确认解除？')) return false;
-    try { await api('/tg/unbind', { method: 'POST' }); toast('已关闭 Telegram 通知'); pageSettings('notify'); return true; } catch (x) { toast(x.message); return false; }
+    try { await api('/tg/unbind', { method: 'POST' }); toast('已关闭 Telegram 通知'); pageSettings('notify'); return true; } catch (x) { toast(x.message, 'err'); return false; }
   } });
   $$('form[data-sec]', page).forEach((form) => (form.onsubmit = async (e) => {
     e.preventDefault();
@@ -1024,7 +1030,7 @@ async function pageSettings(tab = 'account') {
       else if (el.name === 'ar_until') j.ar_until = el.value ? new Date(el.value + 'T00:00:00').getTime() + DAY_MS : 0;
       else j[el.name] = f.get(el.name);
     }
-    try { await api('/settings', { method: 'POST', json: j }); state.me = await api('/me'); toast('已保存'); if (form.dataset.reload) pageSettings(form.dataset.reload); } catch (x) { toast(x.message); }
+    try { await api('/settings', { method: 'POST', json: j }); state.me = await api('/me'); toast('已保存'); if (form.dataset.reload) pageSettings(form.dataset.reload); } catch (x) { toast(x.message, 'err'); }
   }));
   if ($('#pwForm2')) $('#pwForm2').onsubmit = async (e) => {
     e.preventDefault();
@@ -1156,12 +1162,12 @@ const ADMIN = {
     }));
     $$('[data-uout]', el).forEach((b) => (b.onclick = async () => {
       if (!confirm('确认让该账号在所有设备上退出登录？')) return;
-      try { await api(`/admin/users/${b.dataset.uout}/logout`, { method: 'POST' }); toast(b.dataset.uout === String(state.me.id) ? '已退出' : '已让它退出登录'); } catch (x) { toast(x.message); }
+      try { await api(`/admin/users/${b.dataset.uout}/logout`, { method: 'POST' }); toast(b.dataset.uout === String(state.me.id) ? '已退出' : '已让它退出登录'); } catch (x) { toast(x.message, 'err'); }
     }));
     $$('[data-udel]', el).forEach((b) => (b.onclick = async () => {
       const u = items.find((x) => String(x.id) === b.dataset.udel);
       if (!confirm(`确认删除账号 ${u.address}？其别名与临时地址将一并删除，已收邮件保留，管理员仍可查看。`)) return;
-      try { await api(`/admin/users/${u.id}`, { method: 'DELETE' }); toast('已删除'); reload(); } catch (x) { toast(x.message); }
+      try { await api(`/admin/users/${u.id}`, { method: 'DELETE' }); toast('已删除'); reload(); } catch (x) { toast(x.message, 'err'); }
     }));
     $('#batchUsers').onclick = () => batchDialog(domain, reload);
   },
@@ -1214,11 +1220,11 @@ const ADMIN = {
       });
     }));
     $$('[data-atoggle]', el).forEach((b) => (b.onclick = async () => {
-      try { await api(`/admin/addresses/${encodeURIComponent(b.dataset.atoggle)}`, { method: 'PATCH', json: { enabled: b.dataset.on !== '1' } }); reload(); } catch (x) { toast(x.message); }
+      try { await api(`/admin/addresses/${encodeURIComponent(b.dataset.atoggle)}`, { method: 'PATCH', json: { enabled: b.dataset.on !== '1' } }); reload(); } catch (x) { toast(x.message, 'err'); }
     }));
     $$('[data-adel]', el).forEach((b) => (b.onclick = async () => {
       if (!confirm(`删除 ${b.dataset.adel}?`)) return;
-      try { await api(`/admin/addresses/${encodeURIComponent(b.dataset.adel)}`, { method: 'DELETE' }); reload(); } catch (x) { toast(x.message); }
+      try { await api(`/admin/addresses/${encodeURIComponent(b.dataset.adel)}`, { method: 'DELETE' }); reload(); } catch (x) { toast(x.message, 'err'); }
     }));
   },
 
@@ -1256,7 +1262,7 @@ const ADMIN = {
     const refresh = async () => { applyBrand(await api('/brand')); await ADMIN.brand(el); };
     $('#brandName').onsubmit = async (e) => {
       e.preventDefault();
-      try { await api('/admin/brand', { method: 'POST', json: { name: e.target.name.value.trim() } }); toast('已保存'); await refresh(); } catch (x) { toast(x.message); }
+      try { await api('/admin/brand', { method: 'POST', json: { name: e.target.name.value.trim() } }); toast('已保存'); await refresh(); } catch (x) { toast(x.message, 'err'); }
     };
     $('#logoFile').onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
@@ -1266,10 +1272,10 @@ const ADMIN = {
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.error || '上传失败');
         toast('Logo 已更新'); await refresh();
-      } catch (x) { toast(x.message); }
+      } catch (x) { toast(x.message, 'err'); }
     };
     if ($('#logoDel')) $('#logoDel').onclick = async () => {
-      try { await api('/admin/brand/logo', { method: 'DELETE' }); toast('已恢复默认 Logo'); await refresh(); } catch (x) { toast(x.message); }
+      try { await api('/admin/brand/logo', { method: 'DELETE' }); toast('已恢复默认 Logo'); await refresh(); } catch (x) { toast(x.message, 'err'); }
     };
   },
 
@@ -1291,7 +1297,7 @@ const ADMIN = {
       <p class="hint">在 <a href="https://resend.com/domains" target="_blank" rel="noopener">Resend</a> 中添加并验证域名 <code>${domain}</code>，再创建 Sending access 权限的 API Key 填入上方。</p>
       <div class="actions"><button class="primary" type="submit">保存</button></div>`}` })}</div>`;
     const save = async (key) => {
-      try { const x = await api('/admin/send', { method: 'POST', json: { key } }); toast(x.note); state.me = await api('/me'); ADMIN.send(el); } catch (x) { toast(x.message); }
+      try { const x = await api('/admin/send', { method: 'POST', json: { key } }); toast(x.note); state.me = await api('/me'); ADMIN.send(el); } catch (x) { toast(x.message, 'err'); }
     };
     $('#sendPanel').onsubmit = (e) => { e.preventDefault(); const k = e.target.key?.value.trim(); if (k) save(k); };
     wireToggle($('#sendPanel'), { active: r.source === 'settings', off: async () => {
@@ -1333,10 +1339,10 @@ const ADMIN = {
       </ol>` : `<p class="hint">保存后生成网关密钥。没有服务器时无需启用，客户端可通过「转发设置」收信。</p>`}
       <div class="actions"><button class="primary" type="submit">保存</button>${r.on ? '<button type="button" id="imapTest">测试连接</button>' : ''}</div>` })}</div>`;
     const save = async (j) => {
-      try { const x = await api('/admin/imap', { method: 'POST', json: j }); toast(x.note); state.me = await api('/me'); ADMIN.imap(el); } catch (x) { toast(x.message); }
+      try { const x = await api('/admin/imap', { method: 'POST', json: j }); toast(x.note); state.me = await api('/me'); ADMIN.imap(el); } catch (x) { toast(x.message, 'err'); }
     };
     $('#imapPanel').onsubmit = (e) => { e.preventDefault(); save({ host: e.target.host.value.trim() }); };
-    if ($('#imapCopy')) $('#imapCopy').onclick = async () => { try { await navigator.clipboard.writeText(env); toast('已复制网关配置'); } catch { toast('复制失败，请手动选择复制'); } };
+    if ($('#imapCopy')) $('#imapCopy').onclick = async () => { try { await navigator.clipboard.writeText(env); toast('已复制网关配置'); } catch { toast('复制失败，请手动选择复制', 'err'); } };
     if ($('#imapRotate')) $('#imapRotate').onclick = () => {
       if (confirm('重新生成后旧密钥立即失效，需同步更新网关配置并重启网关。确认重新生成？')) save({ host: $('#imapPanel').host.value.trim(), rotate: true });
     };
@@ -1346,7 +1352,7 @@ const ADMIN = {
       try {
         const x = await api('/admin/imap/test', { method: 'POST', json: { host: $('#imapPanel').host.value.trim() } });
         toast(x.ok ? '连接成功，网关运行正常' : x.detail);
-      } catch (x) { toast(x.message); }
+      } catch (x) { toast(x.message, 'err'); }
       b.disabled = false; b.textContent = '测试连接';
     };
     wireToggle($('#imapPanel'), { active: r.on, off: async () => {

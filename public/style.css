@@ -476,8 +476,11 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 #fileNames { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); }
 
 /* 提示条 */
-.toast { position: fixed; left: var(--s6); bottom: var(--s6); z-index: 50; max-width: calc(100vw - 48px); padding: var(--s3) 20px; border-radius: var(--r-lg); background: #242424; color: #fff; box-shadow: var(--shadow-menu); opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .2s, transform .2s; }
-.toast.show { opacity: 1; transform: none; }
+.toast { position: fixed; left: 50%; top: calc(56px + var(--s4)); z-index: 60; display: flex; align-items: center; gap: var(--s2); max-width: min(480px, calc(100vw - 32px)); min-height: 40px; padding: var(--s2) var(--s4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); color: var(--text); font-size: var(--fs-md); line-height: var(--lh-md); box-shadow: var(--shadow-menu); opacity: 0; transform: translate(-50%, -8px); pointer-events: none; transition: opacity .2s, transform .2s; }
+.toast .ic { width: 16px; height: 16px; flex: none; }
+.toast.ok .ic { color: var(--st-ok); }
+.toast.err .ic { color: var(--danger); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* =====================================================================
    屏幕宽度:> 1100 电脑 / 761–1100 平板 / ≤ 760 手机
@@ -532,7 +535,6 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
   .tbl:not(.mini) td .muted.sm { display: inline; margin-left: 6px; }
   .tbl:not(.mini) td:first-child .muted.sm { display: block; margin-left: 0; }
   .table-wrap { overflow: visible; }
-  .toast { left: var(--s4); right: var(--s4); bottom: var(--s4); max-width: none; }
 }
 /* 链接做成次按钮的样子(跳转外部网站) */
 .btn-link { display: inline-flex; align-items: center; gap: var(--s2); height: var(--h); padding: 0 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--text); font-weight: 600; }
