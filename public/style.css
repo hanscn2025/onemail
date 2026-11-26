@@ -583,3 +583,13 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .tbl td.op .lnk { margin-right: 0; }
 /* 说明文字里的外链(前往配置):蓝字,离前文 8,图标 16 离文字 4 */
 .cf-link { display: inline-flex; align-items: center; gap: var(--s1); margin-left: var(--s2); font-weight: 400; }
+
+/* 侧栏收起:写信按钮和导航项同宽(按钮不受最小宽 80 限制),图标在同一条竖线上;悬停在右侧显示名称 */
+.compose-btn { min-width: 0; }
+.app.collapsed .side { overflow: visible; }
+.app.collapsed .side [data-tip] { position: relative; }
+.app.collapsed .side [data-tip]:hover::after {
+  content: attr(data-tip); position: absolute; left: calc(100% + var(--s3)); top: 50%; transform: translateY(-50%); z-index: 50;
+  padding: var(--s1) var(--s2); border-radius: var(--r); background: #242424; color: #fff;
+  font-size: var(--fs-xs); line-height: var(--lh-xs); font-weight: 400; white-space: nowrap; pointer-events: none;
+}

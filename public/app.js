@@ -479,6 +479,8 @@ async function openPage(name) {
   try { await PAGES[base](tab); } catch (x) { toast(x.message); }
 }
 $$('[data-p]').forEach((a) => (a.onclick = () => openPage(a.dataset.p)));
+// 侧栏收起时悬停显示名称
+$$('.side nav a, #composeBtn').forEach((a) => { const t = $('span', a)?.textContent.trim(); if (t) { a.dataset.tip = t; a.setAttribute('aria-label', t); } });
 
 // 页面骨架:标题行(右边放这一页的操作) + 下面一块块白色内容
 function head(title, desc, right = '') {
