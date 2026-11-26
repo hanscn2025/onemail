@@ -601,3 +601,7 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 /* 块内普通按钮行(不是底部按钮栏) */
 .btn-row { display: flex; align-items: center; gap: var(--s2); }
 .t-body > .tg-bot { max-width: none; }
+/* 收件地址筛选提示条:列表顶部,浅蓝底,右边「显示全部」 */
+.rcpt-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s2) var(--s4) var(--s2) 20px; border-bottom: 1px solid var(--line-soft); background: var(--accent-soft); font-size: var(--fs-sm); color: var(--text-2); flex: none; }
+.rcpt-bar strong { color: var(--text); font-weight: 600; word-break: break-all; }
+.rcpt-bar .lnk { font-size: var(--fs-sm); flex: none; margin: 0; }

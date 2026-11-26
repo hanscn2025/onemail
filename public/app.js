@@ -210,6 +210,14 @@ async function loadList(more) {
     state.done = items.length < 50;
   } catch (x) { toast(x.message); }
   renderList(); loadCounts(); if (!more) loadRecipients();
+  // 按收件地址筛选时,列表顶部明确提示,一键取消
+  const bar = $('#rcptBar');
+  const on = state.rcpt && state.folder !== 'sent' && state.folder !== 'drafts';
+  bar.classList.toggle('hidden', !on);
+  if (on) {
+    bar.innerHTML = `<span>仅显示发送至 <strong>${esc(state.rcpt)}</strong> 的邮件</span><button type="button" class="lnk" id="rcptClear">显示全部</button>`;
+    $('#rcptClear').onclick = () => { state.rcpt = ''; closeReader(); loadList(); };
+  }
 }
 
 // 收件地址筛选：这个邮箱收过两个以上地址的信时才显示
@@ -220,6 +228,7 @@ async function loadRecipients() {
   if (items.length < 2 && !state.rcpt) { sel.classList.add('hidden'); return; }
   sel.innerHTML = `<option value="">全部地址</option>` + items.map((x) =>
     `<option value="${esc(x.address)}">${esc(x.address)}${x.unread ? ` (${x.unread})` : ''}</option>`).join('');
+  if (state.rcpt && !items.some((x) => x.address === state.rcpt)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(state.rcpt)}">${esc(state.rcpt)}</option>`);
   sel.value = state.rcpt; sel.classList.remove('hidden');
 }
 $('#rcptSel').onchange = (e) => { state.rcpt = e.target.value; closeReader(); loadList(); };
@@ -1266,30 +1275,27 @@ const ADMIN = {
 
   async send(el) {
     const r = await api('/admin/send');
-    const status = {
-      secret: [badge('ok', '已启用'), `使用 Worker Secret 中的 Key（…${esc(r.tail)}），此处不可修改`],
-      settings: [badge('ok', '已启用'), `Resend API Key（…${esc(r.tail)}）`],
-      cloudflare: [badge('warn', 'Cloudflare 发信'), 'Cloudflare Email Sending（需 Workers 付费计划）；配置 Resend Key 后优先使用 Resend'],
-    }[r.source] || [badge('neutral', '未启用'), '配置 Resend API Key 后即可发信'];
-    const on = !!r.source;
-    el.innerHTML = `<div class="narrow-col">${togglePanel({ id: 'sendPanel', title: '发信（Resend）', on,
-      locked: r.source === 'secret' || r.source === 'cloudflare',
-      desc: '启用后可发送和回复邮件', body: `
-      <p class="status-line">${status[0]}<span class="muted">${status[1]}</span></p>
-      <form id="resendForm2" class="inline-form ${r.source === 'secret' ? 'hidden' : ''}">
-        <input name="key" type="password" placeholder="${r.source === 'settings' ? '输入新的 API Key' : 'Resend API Key（re_ 开头）'}" autocomplete="off">
-        <button class="primary" type="submit">保存</button>
-      </form>
-      <ol class="steps">
-        <li>在 <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> 添加并验证域名 <code>${esc((state.me.domains || [])[0] || '')}</code></li>
-        <li>创建 API Key 并填入上方</li>
-      </ol>` })}</div>`;
+    // 开关 = Resend 是否启用;只有 Cloudflare 自带发信时算未启用
+    const on = r.source === 'settings' || r.source === 'secret';
+    const domain = esc((state.me.domains || [])[0] || '');
+    const desc = r.source === 'cloudflare'
+      ? '启用后通过 Resend 发送和回复邮件。未启用时使用 Cloudflare Email Sending（需 Workers 付费计划）'
+      : '启用后通过 Resend 发送和回复邮件';
+    const status = r.source === 'secret'
+      ? `<p class="status-line">${badge('ok', '已启用')}<span class="muted">API Key（…${esc(r.tail)}）由 Worker Secret 提供，此处不可修改</span></p>`
+      : r.source === 'settings' ? `<p class="status-line">${badge('ok', '已启用')}<span class="muted">当前 API Key …${esc(r.tail)}</span></p>` : '';
+    el.innerHTML = `<div class="narrow-col">${togglePanel({ id: 'sendPanel', tag: 'form', title: '发信（Resend）', on, locked: r.source === 'secret', desc, body: `
+      ${status}
+      ${r.source === 'secret' ? '' : `<label>API Key<input name="key" type="password" autocomplete="off" required
+        placeholder="${r.source === 'settings' ? '如需更换，输入新的 API Key' : '以 re_ 开头'}"></label>
+      <p class="hint">在 <a href="https://resend.com/domains" target="_blank" rel="noopener">Resend</a> 中添加并验证域名 <code>${domain}</code>，再创建 Sending access 权限的 API Key 填入上方。</p>
+      <div class="actions"><button class="primary" type="submit">保存</button></div>`}` })}</div>`;
     const save = async (key) => {
       try { const x = await api('/admin/send', { method: 'POST', json: { key } }); toast(x.note); state.me = await api('/me'); ADMIN.send(el); } catch (x) { toast(x.message); }
     };
-    $('#resendForm2').onsubmit = (e) => { e.preventDefault(); const k = e.target.key.value.trim(); if (k) save(k); };
+    $('#sendPanel').onsubmit = (e) => { e.preventDefault(); const k = e.target.key?.value.trim(); if (k) save(k); };
     wireToggle($('#sendPanel'), { active: r.source === 'settings', off: async () => {
-      if (!confirm('停用后将无法发信。确认停用？')) return false;
+      if (!confirm('停用后将无法通过 Resend 发信。确认停用？')) return false;
       await save(''); return true;
     } });
   },
