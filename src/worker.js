@@ -6,6 +6,7 @@ import { receive, sendOut, snippetOf, textToHtml, addLog } from './mail.js';
 import { extra, fromAddresses, brandRoutes } from './routes.js';
 import { withConfig, isConfigured, runSetup, getSetting, saveSetting } from './config.js';
 import { tgWebhook } from './telegram.js';
+import { gwRoutes, gwAppend, imapAdmin } from './imap.js';
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers } });
@@ -71,6 +72,11 @@ async function api(request, env, url) {
   }
   if (!isConfigured(env)) return err('尚未完成初始化', 503);
 
+  // IMAP 网关(可选组件)用的接口，凭网关密钥访问
+  if (path === '/gw/append' && method === 'POST') return gwAppend(request, env, url);
+  const gw = await gwRoutes(path, method, request, env, url);
+  if (gw) return gw;
+
   if (path === '/login' && method === 'POST') {
     const { address, password } = await request.json().catch(() => ({}));
     const addr = String(address || '').trim().toLowerCase();
@@ -104,6 +110,8 @@ async function api(request, env, url) {
       address: user.address, name: user.name, is_admin: !!user.is_admin, domains: domainsOf(env),
       can_send: !!(env.RESEND_API_KEY || env.EMAIL), can_resend: !!env.RESEND_API_KEY, signature: full?.signature || '', from: await fromAddresses(env, user),
     };
+    // 启用了 IMAP 网关时，客户端设置页显示收信服务器
+    if (env.IMAP_ON && env.IMAP_HOST) out.imap = { host: env.IMAP_HOST.split(':')[0], port: Number(env.IMAP_HOST.split(':')[1]) || 993 };
     if (user.is_admin) {
       const r = await env.DB.prepare(
         `SELECT address FROM users UNION SELECT DISTINCT mailbox FROM messages ORDER BY 1`
@@ -342,6 +350,9 @@ async function api(request, env, url) {
   // ---- 管理员：发信设置 ----
   if (path.startsWith('/admin/')) {
     if (!user.is_admin) return err('需要管理员权限', 403);
+
+    const im = await imapAdmin(path, method, request, env);
+    if (im) return im;
 
     // 发信设置：Resend API Key 存在 settings 表；wrangler secret 里的 RESEND_API_KEY 优先
     if (path === '/admin/send' && method === 'GET') {

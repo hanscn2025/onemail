@@ -1,0 +1,15 @@
+{
+  "name": "onemail-imap-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OneMail 的可选 IMAP 收信网关：让 Foxmail、Outlook、Thunderbird 等客户端直接收信",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

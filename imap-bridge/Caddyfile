@@ -1,0 +1,5 @@
+# 只用来给 IMAP_HOST 自动申请、续期 Let's Encrypt 证书(需要 80 端口能从外网访问)。
+# 网关从 Caddy 的数据目录读证书；Caddy 续期后网关一小时内自动换上新证书。
+{$IMAP_HOST} {
+	respond "OneMail IMAP gateway. Use port 993 in your mail client." 200
+}

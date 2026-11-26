@@ -385,6 +385,8 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
 .tbl.mini th { height: auto; padding: 6px var(--s3) 6px 0; background: none; }
 .tbl.mini td { padding: 6px var(--s3) 6px 0; }
 .tbl.mini th:first-child, .tbl.mini td:first-child { padding-left: 0; }
+.sub .tbl.mini td:first-child { width: 168px; } /* 客户端页收信、发信两张表左列对齐 */
+.sub .table-wrap + .hint { margin-top: var(--s2); }
 
 /* 表单块:内边距 24;块标题 → 内容 16;字段之间 16;字段名 → 控件 4;内容最宽 880;保存按钮在底部分隔线下 */
 .panel { display: grid; gap: var(--s4); padding: var(--pad); }
@@ -406,6 +408,7 @@ button.primary:hover { background: var(--accent-hover); border-color: var(--acce
 .hint a { font-weight: 600; }
 .status-line { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
 .steps { padding-left: 20px; display: grid; gap: var(--s2); }
+.env-block { display: block; flex: 1; min-width: 0; padding: var(--s2) var(--s3); border-radius: var(--r); background: var(--chip); color: var(--text); overflow-wrap: anywhere; line-height: 1.7; }
 .flow { margin: 0; padding-left: 20px; display: grid; gap: var(--s2); }
 .inline-form { display: flex; gap: var(--s2); }
 .inline-form input { flex: 1; }

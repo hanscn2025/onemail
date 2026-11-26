@@ -886,7 +886,8 @@ async function pageTemp() {
 }
 
 // ---------- 在 Foxmail / Outlook 里使用 ----------
-// Cloudflare Workers 开不了 IMAP/POP3 服务，所以客户端收信靠「转发到外部邮箱」，发信走 Resend 的 SMTP
+// Cloudflare Workers 开不了 IMAP/POP3 服务：默认客户端收信靠「转发到外部邮箱」;
+// 管理员部署了 IMAP 网关(可选组件)并在管理中心启用后，这里显示 IMAP 服务器。发信走 Resend 的 SMTP
 function clientPanel() {
   const me = state.me;
   const row = (k, v, copy = true) => `<tr><td class="muted nowrap">${k}</td><td><div class="addr-cell"><code>${esc(v)}</code>${copy ? `<button class="icon-btn xs" type="button" data-copy="${esc(v)}" title="复制">${icon('copy')}</button>` : ''}</div></td></tr>`;
@@ -897,7 +898,15 @@ function clientPanel() {
     <h2>在 Foxmail / Outlook 中使用</h2>
     <div class="subs">
     <div class="sub"><h3>收信</h3>
-    <p class="hint">本服务不提供 IMAP/POP3。请在「转发设置」中转发至 Gmail、QQ 邮箱等，再在客户端中添加该邮箱。</p></div>
+    ${me.imap ? `<div class="table-wrap"><table class="tbl mini"><tbody>
+      ${row('收件服务器（IMAP）', me.imap.host)}
+      ${row('端口', String(me.imap.port))}
+      ${row('加密', `SSL/TLS（或 143 + STARTTLS）`, false)}
+      ${row('用户名', me.address)}
+      <tr><td class="muted nowrap">密码</td><td class="sm">本邮箱的登录密码</td></tr>
+    </tbody></table></div>
+    <p class="hint">客户端中删除的邮件移至垃圾箱，在垃圾箱中删除为彻底删除。不支持新建文件夹。</p>`
+      : `<p class="hint">本服务不提供 IMAP/POP3。请在「转发设置」中转发至 Gmail、QQ 邮箱等，再在客户端中添加该邮箱。</p>`}</div>
     <div class="sub"><h3>发信</h3>
     ${me.can_send ? '' : `<p class="hint">发信服务未启用${me.is_admin ? `，<a data-goto-send>前往启用</a>` : ''}</p>`}
     <div class="table-wrap"><table class="tbl mini"><tbody>
@@ -1038,7 +1047,7 @@ async function pageSettings(tab = 'account') {
 // ---------- 管理中心 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号管理', 'users'], ['brand', '品牌设置', 'palette'],
-  ['send', '发信设置', 'send'], ['logs', '记录', 'history'],
+  ['send', '发信设置', 'send'], ['imap', 'IMAP 服务', 'devices'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -1297,6 +1306,52 @@ const ADMIN = {
     wireToggle($('#sendPanel'), { active: r.source === 'settings', off: async () => {
       if (!confirm('停用后将无法通过 Resend 发信。确认停用？')) return false;
       await save(''); return true;
+    } });
+  },
+
+  // IMAP 服务(可选):网关部署在管理员自己的服务器上，这里填网关地址、拿密钥、测试连接
+  async imap(el) {
+    const r = await api('/admin/imap');
+    const seen = r.seen && r.seen.at;
+    const online = seen && Date.now() - r.seen.at < 15 * 60 * 1000;
+    const status = !r.on ? '' : online
+      ? `<p class="status-line">${badge('ok', '网关在线')}<span class="muted">最近连接 ${fmtDate(r.seen.at, true)}${r.seen.version ? ` · 版本 ${esc(r.seen.version)}` : ''}</span></p>`
+      : `<p class="status-line">${badge(seen ? 'warn' : 'neutral', seen ? '网关离线' : '尚未连接')}<span class="muted">${seen ? `最近连接 ${fmtDate(r.seen.at, true)}` : '网关启动后会自动连接，状态在此显示'}</span></p>`;
+    const env = `ONEMAIL_URL=${location.origin}\nIMAP_HOST=${r.host}\nGATEWAY_KEY=${r.key}`;
+    const domain = esc((state.me.domains || [])[0] || 'example.com');
+    el.innerHTML = `<div class="narrow-col">${togglePanel({ id: 'imapPanel', tag: 'form', title: 'IMAP 服务（可选）', on: r.on,
+      desc: '为 Foxmail、Outlook 等客户端提供 IMAP 收信，需在自有服务器上部署网关', body: `
+      ${status}
+      <label>网关地址<input name="host" value="${esc(r.host || `imap.${(state.me.domains || [])[0] || 'example.com'}`)}" placeholder="imap.${domain}" required autocomplete="off"></label>
+      ${r.on ? `<div class="field"><span class="field-title">网关配置</span>
+        <div class="addr-cell"><code class="env-block">${esc(env).replace(/\n/g, '<br>')}</code><button class="icon-btn xs" type="button" id="imapCopy" title="复制">${icon('copy')}</button></div>
+        <span class="muted sm">填入网关的 .env 文件。密钥泄露时可<button type="button" class="lnk" id="imapRotate">重新生成密钥</button></span></div>
+      <ol class="steps">
+        <li>在有公网 IP 的服务器上部署 IMAP 网关（预览版，部署文档即将发布）</li>
+        <li>添加 DNS 记录：<code>${esc(r.host.split(':')[0])}</code> 指向服务器 IP（A 记录，不开启代理）</li>
+        <li>将上方配置填入网关的 .env 并启动，然后点击「测试连接」</li>
+      </ol>` : `<p class="hint">保存后生成网关密钥。没有服务器时无需启用，客户端可通过「转发设置」收信。</p>`}
+      <div class="actions"><button class="primary" type="submit">保存</button>${r.on ? '<button type="button" id="imapTest">测试连接</button>' : ''}</div>` })}</div>`;
+    const save = async (j) => {
+      try { const x = await api('/admin/imap', { method: 'POST', json: j }); toast(x.note); state.me = await api('/me'); ADMIN.imap(el); } catch (x) { toast(x.message); }
+    };
+    $('#imapPanel').onsubmit = (e) => { e.preventDefault(); save({ host: e.target.host.value.trim() }); };
+    if ($('#imapCopy')) $('#imapCopy').onclick = async () => { try { await navigator.clipboard.writeText(env); toast('已复制网关配置'); } catch { toast('复制失败，请手动选择复制'); } };
+    if ($('#imapRotate')) $('#imapRotate').onclick = () => {
+      if (confirm('重新生成后旧密钥立即失效，需同步更新网关配置并重启网关。确认重新生成？')) save({ host: $('#imapPanel').host.value.trim(), rotate: true });
+    };
+    if ($('#imapTest')) $('#imapTest').onclick = async () => {
+      const b = $('#imapTest');
+      b.disabled = true; b.textContent = '测试中…';
+      try {
+        const x = await api('/admin/imap/test', { method: 'POST', json: { host: $('#imapPanel').host.value.trim() } });
+        toast(x.ok ? '连接成功，网关运行正常' : x.detail);
+      } catch (x) { toast(x.message); }
+      b.disabled = false; b.textContent = '测试连接';
+    };
+    wireToggle($('#imapPanel'), { active: r.on, off: async () => {
+      if (!confirm('停用后客户端将无法通过 IMAP 收信，网关密钥同时失效。确认停用？')) return false;
+      await save({ on: false }); return true;
     } });
   },
 

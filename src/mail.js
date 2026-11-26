@@ -123,8 +123,8 @@ async function forwardViaSend(env, p, message, rcpt, to) {
   }
 }
 
-// 把解析好的信存进一个邮箱
-async function store(env, mailbox, p, raw, message) {
+// 把解析好的信存进一个邮箱。opts 给 IMAP 网关 APPEND 用：放进哪个文件夹、已读/星标、时间
+export async function store(env, mailbox, p, raw, message, opts = {}) {
   const id = crypto.randomUUID();
   const attach = [];
   for (const [i, a] of (p.attachments || []).entries()) {
@@ -147,14 +147,14 @@ async function store(env, mailbox, p, raw, message) {
   const visibleAttach = attach.filter((a) => !(a.inline && a.cid));
   await env.DB.prepare(
     `INSERT INTO messages (id, mailbox, folder, message_id, in_reply_to, refs, envelope_to, from_addr, from_name,
-       to_json, cc_json, reply_to, subject, snippet, attach_json, has_attach, size, date)
-     VALUES (?, ?, 'inbox', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       to_json, cc_json, reply_to, subject, snippet, attach_json, has_attach, size, seen, starred, date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
-    id, mailbox, p.messageId || null, p.inReplyTo || null, p.references || null,
-    message.to.toLowerCase(), (from.address || '').toLowerCase(), from.name || '',
+    id, mailbox, opts.folder || 'inbox', p.messageId || null, p.inReplyTo || null, p.references || null,
+    message.to ? message.to.toLowerCase() : null, (from.address || '').toLowerCase(), from.name || '',
     JSON.stringify(addrList(p.to)), JSON.stringify(addrList(p.cc)), p.replyTo?.[0]?.address || null,
     p.subject || '', snippetOf(p.text, p.html), JSON.stringify(attach), visibleAttach.length ? 1 : 0,
-    message.rawSize || raw.byteLength, Date.now()
+    message.rawSize || raw.byteLength, opts.seen ? 1 : 0, opts.starred ? 1 : 0, opts.date || Date.now()
   ).run();
   return id;
 }

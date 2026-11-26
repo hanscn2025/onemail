@@ -227,6 +227,7 @@ export async function extra(path, method, request, env, user, url) {
     const subject = String(fd.get('subject') || '').slice(0, 500);
     const meta = { from: lower(fd.get('from')) || user.address, bcc: list('bcc'), reply_to_id: String(fd.get('reply_to_id') || '') };
     await env.BUCKET.put(`body/${id}.json`, JSON.stringify({ text, html: '', draft: meta }));
+    await env.BUCKET.delete(`raw/${id}.eml`); // IMAP 读过的旧版原文作废
     await env.DB.prepare(
       `INSERT INTO messages (id, mailbox, folder, from_addr, from_name, to_json, cc_json, subject, snippet, size, seen, date)
        VALUES (?, ?, 'drafts', ?, '', ?, ?, ?, ?, ?, 1, ?)

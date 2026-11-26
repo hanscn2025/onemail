@@ -1,0 +1,32 @@
+# OneMail IMAP 网关(可选组件)
+#   cp .env.example .env   # 填好 ONEMAIL_URL、IMAP_HOST、GATEWAY_KEY
+#   docker compose up -d
+services:
+  imap-bridge:
+    build: .
+    image: onemail-imap-bridge
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # 用 Caddy 时证书在它的数据目录里，网关按 IMAP_HOST 自动找到
+      CADDY_DATA: /caddy-data
+    ports:
+      - "993:993"
+      - "143:143"
+    volumes:
+      - ./caddy-data:/caddy-data:ro
+      - ./certs:/certs:ro
+
+  # 自动申请证书(COMPOSE_PROFILES=caddy 时启动)
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-data:/data
+      - ./caddy-config:/config

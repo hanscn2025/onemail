@@ -86,10 +86,46 @@ const USER_COLUMNS = {
 // auto=1:没提前建、第一次收到信时自动登记的地址，跟随兜底(默认)规则
 const ADDR_COLUMNS = { auto: 'INTEGER NOT NULL DEFAULT 0' };
 
+// IMAP 用的 UID:全库递增，新信、换文件夹、草稿重新保存时由触发器分配新值(IMAP 要求同一文件夹里只增不减、内容不变)
+const UID_NEXT = '(SELECT COALESCE(MAX(uid), 0) + 1 FROM messages)';
+const UID_SCHEMA = [
+  `CREATE INDEX IF NOT EXISTS idx_msg_uid ON messages(uid)`,
+  `CREATE INDEX IF NOT EXISTS idx_msg_box_uid ON messages(mailbox, uid)`,
+  `CREATE TRIGGER IF NOT EXISTS trg_msg_uid_ins AFTER INSERT ON messages BEGIN
+     UPDATE messages SET uid = ${UID_NEXT} WHERE id = NEW.id; END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_msg_uid_mv AFTER UPDATE OF folder, date ON messages
+     WHEN OLD.folder != NEW.folder OR (NEW.folder = 'drafts' AND OLD.date != NEW.date) BEGIN
+     UPDATE messages SET uid = ${UID_NEXT} WHERE id = NEW.id; END`,
+  // 每个邮箱一个版本号，信件增删、已读星标变化时加一；IMAP 网关轮询时先看它，没变就不用重新读整个文件夹
+  `CREATE TABLE IF NOT EXISTS mbox_ver (mailbox TEXT PRIMARY KEY, v INTEGER NOT NULL)`,
+  `CREATE TRIGGER IF NOT EXISTS trg_ver_ins AFTER INSERT ON messages BEGIN
+     INSERT INTO mbox_ver (mailbox, v) VALUES (NEW.mailbox, 1) ON CONFLICT(mailbox) DO UPDATE SET v = v + 1; END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_ver_del AFTER DELETE ON messages BEGIN
+     INSERT INTO mbox_ver (mailbox, v) VALUES (OLD.mailbox, 1) ON CONFLICT(mailbox) DO UPDATE SET v = v + 1; END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_ver_upd AFTER UPDATE OF seen, starred, folder, uid ON messages BEGIN
+     INSERT INTO mbox_ver (mailbox, v) VALUES (NEW.mailbox, 1) ON CONFLICT(mailbox) DO UPDATE SET v = v + 1; END`,
+];
+
 let schemaReady = false;
 let cached = null;
 let cachedAt = 0;
 const CACHE_MS = 30_000; // 别的实例改了设置(比如填了发信 Key),最多 30 秒后这里也能读到
+
+let imapReady = false;
+// 第一次打开 IMAP 服务时调用；之后每次冷启动由 ensureSchema 检查
+export async function ensureImapSchema(env) {
+  if (imapReady) return;
+  const msgCols = new Set((await env.DB.prepare('PRAGMA table_info(messages)').all()).results.map((c) => c.name));
+  if (!msgCols.has('uid')) {
+    try { await env.DB.prepare('ALTER TABLE messages ADD COLUMN uid INTEGER').run(); } catch (e) {
+      if (!/duplicate column/i.test(e.message)) throw e;
+    }
+  }
+  // 老信按入库顺序编号(先编号再建触发器，之后的新信由触发器接着编);已编过号时没有空值，这句不改任何行
+  await env.DB.prepare('UPDATE messages SET uid = rowid + (SELECT COALESCE(MAX(uid), 0) FROM messages) WHERE uid IS NULL').run();
+  await env.DB.batch(UID_SCHEMA.map((s) => env.DB.prepare(s)));
+  imapReady = true;
+}
 
 async function ensureSchema(env) {
   if (schemaReady) return;
@@ -103,6 +139,9 @@ async function ensureSchema(env) {
       }
     }
   }
+  // IMAP 用的 UID 和版本号：只有启用过 IMAP 服务的部署才建，没用这个功能的不受影响
+  const on = await env.DB.prepare(`SELECT 1 FROM settings WHERE key = 'imap_on'`).first();
+  if (on) await ensureImapSchema(env);
   schemaReady = true;
 }
 
@@ -125,6 +164,9 @@ async function loadConfig(env) {
     tgBot: s.tg_bot || '',
     tgSecret: s.tg_secret || '',
     appUrl: s.app_url || '',
+    imapOn: s.imap_on === '1',
+    imapHost: s.imap_host || '',
+    imapKey: s.imap_gw_key || '',
     catchAllLocked: env.CATCH_ALL !== undefined,
   };
   if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存，别的实例完成设置后这里能读到
@@ -146,6 +188,9 @@ export async function withConfig(env) {
     TG_BOT: { value: cfg.tgBot },
     TG_SECRET: { value: cfg.tgSecret },
     APP_URL: { value: cfg.appUrl },
+    IMAP_ON: { value: cfg.imapOn },
+    IMAP_HOST: { value: cfg.imapHost },
+    IMAP_KEY: { value: cfg.imapKey },
     CATCH_ALL_LOCKED: { value: cfg.catchAllLocked },
   });
 }

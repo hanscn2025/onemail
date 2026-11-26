@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS messages (
     seen INTEGER NOT NULL DEFAULT 0,
     starred INTEGER NOT NULL DEFAULT 0,
     date INTEGER NOT NULL,
-    moved_at INTEGER);
+    moved_at INTEGER,
+    uid INTEGER); -- IMAP UID(第一次打开 IMAP 服务时 ALTER 补上)
 
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
@@ -71,3 +72,24 @@ CREATE INDEX IF NOT EXISTS idx_msg_box ON messages(mailbox, folder, date DESC);
 CREATE INDEX IF NOT EXISTS idx_msg_trash ON messages(folder, moved_at);
 
 CREATE TABLE IF NOT EXISTS tg_links (code TEXT PRIMARY KEY, user_id INTEGER NOT NULL, at INTEGER NOT NULL);
+
+-- 以下仅在管理员第一次打开 IMAP 服务时创建
+-- IMAP UID:全库递增，新信、换文件夹、草稿重新保存时分配新值
+CREATE INDEX IF NOT EXISTS idx_msg_uid ON messages(uid);
+CREATE INDEX IF NOT EXISTS idx_msg_box_uid ON messages(mailbox, uid);
+
+-- 每个邮箱的版本号(IMAP 网关轮询用)
+CREATE TABLE IF NOT EXISTS mbox_ver (mailbox TEXT PRIMARY KEY, v INTEGER NOT NULL);
+CREATE TRIGGER IF NOT EXISTS trg_ver_ins AFTER INSERT ON messages BEGIN
+  INSERT INTO mbox_ver (mailbox, v) VALUES (NEW.mailbox, 1) ON CONFLICT(mailbox) DO UPDATE SET v = v + 1; END;
+CREATE TRIGGER IF NOT EXISTS trg_ver_del AFTER DELETE ON messages BEGIN
+  INSERT INTO mbox_ver (mailbox, v) VALUES (OLD.mailbox, 1) ON CONFLICT(mailbox) DO UPDATE SET v = v + 1; END;
+CREATE TRIGGER IF NOT EXISTS trg_ver_upd AFTER UPDATE OF seen, starred, folder, uid ON messages BEGIN
+  INSERT INTO mbox_ver (mailbox, v) VALUES (NEW.mailbox, 1) ON CONFLICT(mailbox) DO UPDATE SET v = v + 1; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_msg_uid_ins AFTER INSERT ON messages BEGIN
+  UPDATE messages SET uid = (SELECT COALESCE(MAX(uid), 0) + 1 FROM messages) WHERE id = NEW.id; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_msg_uid_mv AFTER UPDATE OF folder, date ON messages
+  WHEN OLD.folder != NEW.folder OR (NEW.folder = 'drafts' AND OLD.date != NEW.date) BEGIN
+  UPDATE messages SET uid = (SELECT COALESCE(MAX(uid), 0) + 1 FROM messages) WHERE id = NEW.id; END;

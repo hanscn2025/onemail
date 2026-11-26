@@ -5,3 +5,7 @@ node_modules/
 wrangler.live.toml
 LIVE.md
 视频脚本.md
+imap-bridge/.env
+imap-bridge/caddy-data
+imap-bridge/caddy-config
+imap-bridge/certs

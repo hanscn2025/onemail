@@ -6,7 +6,7 @@ const b64u = (buf) =>
   btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 
-function timingSafeEqual(a, b) {
+export function timingSafeEqual(a, b) {
   if (a.length !== b.length) return false;
   let r = 0;
   for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
@@ -37,10 +37,14 @@ async function hmac(secret, data) {
 const COOKIE = 'cfmail_s';
 const TTL = 30 * 24 * 3600;
 
-export async function makeSessionCookie(env, user) {
+// 会话令牌：网页放在 cookie 里，IMAP 网关放在 Authorization 头里；改密码、停用账号后一起失效
+export async function makeToken(env, user) {
   const payload = b64u(enc.encode(JSON.stringify({ u: user.id, v: user.session_ver, e: Math.floor(Date.now() / 1000) + TTL })));
-  const sig = await hmac(env.SESSION_SECRET, payload);
-  return `${COOKIE}=${payload}.${sig}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${TTL}`;
+  return `${payload}.${await hmac(env.SESSION_SECRET, payload)}`;
+}
+
+export async function makeSessionCookie(env, user) {
+  return `${COOKIE}=${await makeToken(env, user)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${TTL}`;
 }
 
 export const clearCookie = `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
@@ -48,8 +52,11 @@ export const clearCookie = `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Stric
 export async function getSessionUser(request, env) {
   if (!env.SESSION_SECRET) throw new Error('SESSION_SECRET 未设置');
   const m = (request.headers.get('Cookie') || '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`));
-  if (!m) return null;
-  const [payload, sig] = m[1].split('.');
+  return m ? userFromToken(env, m[1]) : null;
+}
+
+export async function userFromToken(env, token) {
+  const [payload, sig] = String(token || '').split('.');
   if (!payload || !sig || !timingSafeEqual(await hmac(env.SESSION_SECRET, payload), sig)) return null;
   let p;
   try {

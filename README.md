@@ -58,6 +58,7 @@ Cloudflare 后台 → 你的域名 → 电子邮件 → 电子邮件路由 → �
 - **网页**:`public/` 下的单页应用。登录用 HttpOnly cookie;所有修改类请求必须带 `X-Mail: 1` 头(防 CSRF);同一 IP 或账号连续输错 5 次密码锁 15 分钟。
 - **地址**:`addresses` 表存临时地址、别名、群组;`logs` 表存登录、投递、转发、发信记录(保留 90 天)。表和新增的列在程序第一次运行时自动建好,老数据库会自动升级。
 - **配置**:首次设置时写进 D1 的 `settings` 表(域名、兜底邮箱、兜底转发、会话密钥、Resend Key)。也可以用 vars / secret 覆盖:`DOMAINS`(逗号分隔)、`CATCH_ALL`、`SESSION_SECRET`、`RESEND_API_KEY`。
+- **IMAP(预览，尚未发布)**:为后续的 IMAP 网关预留了接口。`imap-bridge/` 是独立部署的 Node 网关，处理 IMAP 协议，通过 `/api/gw/*` 接口(网关密钥 + 用户登录令牌)读写 D1/R2,自己不存信。`messages.uid` 列由触发器分配，给 IMAP 当 UID 用。
 - **定时任务**:每天 03:17 UTC 清掉在垃圾箱里放了超过 `TRASH_DAYS` 天的信,以及过期的记录。
 
 ## 开启发信
