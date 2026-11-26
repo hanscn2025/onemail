@@ -619,3 +619,6 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 .op-links .lnk { margin: 0; }
 /* 表格里的开关:不撑高行 */
 .tbl td .switch { min-height: 0; display: inline-flex !important; vertical-align: middle; }
+/* 未配置前不可填写的字段:标题和输入框一起置灰 */
+label.off { color: var(--muted); }
+label.off input:disabled { color: var(--muted); cursor: not-allowed; }

@@ -1126,19 +1126,20 @@ const ADMIN = {
       ${u.id ? '' : `<label>地址<div class="addr-input"><input name="local" required autocomplete="off" autocapitalize="off" spellcheck="false"><span class="suffix">@${esc(domain)}</span></div></label>`}
       <label>显示名称<input name="name" value="${esc(u.name || '')}" maxlength="80"></label>
       ${u.id ? '' : '<label>密码<input name="password" type="password" minlength="10" required autocomplete="new-password" placeholder="至少 10 位"></label>'}
-      ${state.me.can_send ? `<div class="form-grid">
+      <div class="form-grid">
         <label>存储上限（MB，0 为不限）<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
-        <label>每天发信上限（0 为不限）<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>
-      </div>` : `<label>存储上限（MB，0 为不限）<input name="quota_mb" type="number" min="0" value="${u.quota_mb || 0}"></label>
-      <input type="hidden" name="send_limit" value="${u.send_limit || 0}">`}
-      ${u.id ? `<label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
-      ${fwdModeField(u.fwd_mode)}` : ''}
+        ${state.me.can_send
+          ? `<label>每天发信上限（0 为不限）<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>`
+          : `<label class="off">每天发信上限<input type="text" value="需先启用发信服务" disabled title="在「管理中心 → 发信设置」启用后可设置"><input type="hidden" name="send_limit" value="${u.send_limit || 0}"></label>`}
+      </div>
+      <label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
+      ${fwdModeField(u.fwd_mode)}
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
       ${u.id ? `<label class="check"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}> 停用这个账号（不能登录，发来的信会被退回）</label>` : ''}`;
     $('#newUser').onclick = () => editDialog('新建账号', userFields(), async (f) => {
       await api('/admin/users', { method: 'POST', json: {
         address: `${String(f.get('local')).trim().toLowerCase()}@${domain}`, name: f.get('name'), password: f.get('password'),
-        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')),
+        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf',
       } });
       toast('已创建'); reload();
     }, '创建');
