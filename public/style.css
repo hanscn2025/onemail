@@ -622,3 +622,10 @@ dialog.compose { width: min(760px, calc(100vw - 32px)); padding: 0; overflow: hi
 /* 未配置前不可填写的字段:标题和输入框一起置灰 */
 label.off { color: var(--muted); }
 label.off input:disabled { color: var(--muted); cursor: not-allowed; }
+/* 表单里的开关字段:标题 + 说明在左,开关在右,打开后下方展开配置 */
+.sw-field { display: flex; flex-direction: column; gap: var(--s3); }
+.sw-line { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); }
+.sw-line > div { display: flex; flex-direction: column; gap: 2px; }
+.sw-line strong { font-weight: 600; }
+.sw-line .switch { min-height: 0; flex: none; }
+.sw-body { display: flex; flex-direction: column; gap: var(--s4); }

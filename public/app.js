@@ -1132,26 +1132,38 @@ const ADMIN = {
           ? `<label>每天发信上限（0 为不限）<input name="send_limit" type="number" min="0" value="${u.send_limit || 0}"></label>`
           : `<label class="off">每天发信上限<input type="text" value="需先启用发信服务" disabled title="在「管理中心 → 发信设置」启用后可设置"><input type="hidden" name="send_limit" value="${u.send_limit || 0}"></label>`}
       </div>
-      <label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com"></label>
-      ${fwdModeField(u.fwd_mode)}
+      <div class="sw-field">
+        <div class="sw-line"><div><strong>转发</strong><span class="muted sm">将收到的邮件同时转发到其他邮箱，默认不转发</span></div>
+          <label class="switch" title="转发"><input type="checkbox" name="fwd_on" data-fwdsw ${u.fwd_to ? 'checked' : ''}><span class="track"></span></label></div>
+        <div class="sw-body ${u.fwd_to ? '' : 'hidden'}">
+          <label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com" ${u.fwd_to ? 'required' : ''}></label>
+          ${fwdModeField(u.fwd_mode)}
+        </div>
+      </div>
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
       ${u.id ? `<label class="check"><input type="checkbox" name="disabled" ${u.disabled ? 'checked' : ''}> 停用这个账号（不能登录，发来的信会被退回）</label>` : ''}`;
-    $('#newUser').onclick = () => editDialog('新建账号', userFields(), async (f) => {
+    const wireFwdSw = () => {
+      const cb = $('#editBody [data-fwdsw]'), body = $('#editBody .sw-body'), to = $('#editBody [name=fwd_to]');
+      cb.onchange = () => { body.classList.toggle('hidden', !cb.checked); to.required = cb.checked; if (cb.checked) to.focus(); };
+    };
+    const fwdOf = (f) => (f.get('fwd_on') === 'on' ? { fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf' } : { fwd_to: '', fwd_mode: 'cf' });
+    $('#newUser').onclick = () => { editDialog('新建账号', userFields(), async (f) => {
       await api('/admin/users', { method: 'POST', json: {
         address: `${String(f.get('local')).trim().toLowerCase()}@${domain}`, name: f.get('name'), password: f.get('password'),
-        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf',
+        is_admin: f.get('is_admin') === 'on', quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), ...fwdOf(f),
       } });
       toast('已创建'); reload();
-    }, '创建');
+    }, '创建'); wireFwdSw(); };
     $$('[data-uedit]', el).forEach((b) => (b.onclick = () => {
       const u = items.find((x) => String(x.id) === b.dataset.uedit);
       editDialog(`编辑 ${u.address}`, userFields(u), async (f) => {
         await api(`/admin/users/${u.id}`, { method: 'PATCH', json: {
-          name: f.get('name'), quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf',
+          name: f.get('name'), quota_mb: Number(f.get('quota_mb')), send_limit: Number(f.get('send_limit')), ...fwdOf(f),
           is_admin: f.get('is_admin') === 'on', disabled: f.get('disabled') === 'on',
         } });
         toast('已保存'); reload();
       });
+      wireFwdSw();
     }));
     $$('[data-upw]', el).forEach((b) => (b.onclick = () => {
       const u = items.find((x) => String(x.id) === b.dataset.upw);
