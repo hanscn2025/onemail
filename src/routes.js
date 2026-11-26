@@ -35,8 +35,8 @@ function checkMode(env, v) {
 function checkFwd(env, v) {
   const a = lower(v);
   if (!a) return { value: '' };
-  if (!EMAIL_RE.test(a)) return { error: `转发地址格式不对：${a}` };
-  if (isLocal(env, a)) return { error: '转发地址不能是本域名的地址(本域名内请用别名或群组)' };
+  if (!EMAIL_RE.test(a)) return { error: `转发地址格式无效：${a}` };
+  if (isLocal(env, a)) return { error: '转发地址不能为本域名地址' };
   return { value: a };
 }
 
