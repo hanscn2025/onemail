@@ -795,29 +795,26 @@ function tempRows(items, showOwner, reload) {
   const now = Date.now();
   const rows = items.map((a) => {
     const expired = a.expires_at && a.expires_at < now;
-    const st = !a.enabled ? badge('neutral', '已停用') : expired ? badge('warn', '已过期') : badge('ok', '使用中');
     const to = a.auto ? defaultChips() : a.owner === state.me.address ? '我的邮箱' : esc(a.owner || '');
-    const exp = a.expires_at ? (expired ? '已过期' : `${fmtDay(a.expires_at)} 到期`) : '永久';
+    const exp = a.expires_at ? (expired ? badge('warn', '已过期') : `${fmtDay(a.expires_at)} 到期`) : '永久';
     return `<tr data-q="${esc((a.address + ' ' + a.note + ' ' + a.fwd_to + ' ' + (a.owner || '')).toLowerCase())}" data-st="${!a.enabled ? 'off' : expired ? 'exp' : 'on'}" data-s1="${a.last_at || 0}" data-s2="${a.hits}" data-s3="${esc(a.address)}">
       <td><div class="addr-cell"><strong>${esc(a.address)}</strong><button class="icon-btn xs" data-copy="${esc(a.address)}" title="复制">${icon('copy')}</button></div>${a.note ? `<div class="muted sm">${esc(a.note)}</div>` : ''}</td>
       ${showOwner ? `<td>${esc(a.owner || '—')}</td>` : ''}
       <td>${to}</td>
-      <td>${st}<div class="muted sm">${exp}</div></td>
+      <td>${exp}</td>
       <td class="num">${a.hits}<div class="muted sm">${a.last_at ? '最近 ' + fmtDate(a.last_at) : '还没收到'}</div></td>
-      <td class="op"><div class="op-links">
-        <button type="button" class="lnk" data-tedit="${esc(a.address)}">编辑</button>
-        <button type="button" class="lnk" data-ttoggle="${esc(a.address)}" data-on="${a.enabled}">${a.enabled ? '停用' : '启用'}</button>
-        <button type="button" class="lnk danger" data-tdel="${esc(a.address)}">删除</button>
-      </div></td></tr>`;
+      <td class="op"><button type="button" class="lnk" data-tedit="${esc(a.address)}">编辑</button></td>
+      <td class="op"><label class="switch" title="${a.enabled ? '已启用，点击停用' : '已停用，点击启用'}"><input type="checkbox" data-ttoggle="${esc(a.address)}" ${a.enabled ? 'checked' : ''} aria-label="启用 ${esc(a.address)}"><span class="track"></span></label></td>
+      <td class="op"><button type="button" class="lnk danger" data-tdel="${esc(a.address)}">删除</button></td></tr>`;
   }).join('');
   setTimeout(() => wireTemp(items, reload));
-  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>状态</th><th class="num">收到</th><th class="op">操作</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
+  return `<div class="blk"><div class="table-wrap"><table class="tbl"><thead><tr><th>地址</th>${showOwner ? '<th>所属账号</th>' : ''}<th>送到</th><th>有效期</th><th class="num">收到</th><th class="op">操作</th><th class="op">状态</th><th class="op">删除</th></tr></thead><tbody class="temp-rows">${rows}</tbody></table></div>${tblFoot(items.length, '个')}</div>`;
 }
 
 function wireTemp(items, reload) {
   $$('[data-copy]', page).forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
-  $$('[data-ttoggle]', page).forEach((b) => (b.onclick = async () => {
-    try { await api(`/temp/${encodeURIComponent(b.dataset.ttoggle)}`, { method: 'PATCH', json: { enabled: b.dataset.on !== '1' } }); reload(); } catch (x) { toast(x.message); }
+  $$('[data-ttoggle]', page).forEach((b) => (b.onchange = async () => {
+    try { await api(`/temp/${encodeURIComponent(b.dataset.ttoggle)}`, { method: 'PATCH', json: { enabled: b.checked } }); toast(b.checked ? '已启用' : '已停用'); reload(); } catch (x) { b.checked = !b.checked; toast(x.message); }
   }));
   $$('[data-tdel]', page).forEach((b) => (b.onclick = async () => {
     if (!confirm(`确认删除 ${b.dataset.tdel}？已收到的邮件将保留。`)) return;
