@@ -706,7 +706,7 @@ const VERIFY = { verified: ['ok', '已验证'], pending: ['warn', '待验证'], 
 function verifyBadge(v) { return VERIFY[v] ? badge(...VERIFY[v]) : ''; }
 function fwdStatusPanel(s) {
   const st = s.fwd_status;
-  const line = !st ? `${badge('neutral', '暂无记录')}<span class="muted">收到邮件后在此显示转发结果</span>`
+  const line = !st ? `${badge('neutral', '暂无转发记录')}`
     : st.ok ? `${badge('ok', '转发正常')}<span class="muted">最近转发 ${fmtDate(st.at, true)}</span>`
       : `${badge('bad', '转发失败')}<span class="muted">${fmtDate(st.at, true)} · ${esc(st.detail)}</span>`;
   const v = s.fwd_verify;
@@ -720,7 +720,6 @@ function fwdStatusPanel(s) {
     ${verify}
     <p class="status-line">${line}</p>
     ${btns ? `<div class="actions">${btns}</div>` : ''}
-    ${state.me.can_resend ? '' : `<p class="hint">用其他邮箱给 ${esc(state.me.address)} 发一封邮件，即可在此查看转发结果。</p>`}
   </section>`;
 }
 
