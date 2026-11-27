@@ -710,6 +710,8 @@ function fwdStatusPanel(s) {
     : st.ok ? `${badge('ok', '转发正常')}<span class="muted">最近转发 ${fmtDate(st.at, true)}</span>`
       : `${badge('bad', '转发失败')}<span class="muted">${fmtDate(st.at, true)} · ${esc(st.detail)}</span>`;
   const v = s.fwd_verify;
+  const btns = v && v !== 'verified' ? `<button class="primary" type="button" id="fwdVerify">${v === 'pending' ? '重新发送验证邮件' : '重新提交'}</button>`
+    : state.me.can_resend ? '<button class="primary" type="button" id="fwdTest">发送测试邮件</button>' : '';
   const verify = !v ? '' : v === 'verified'
     ? `<p class="status-line">${verifyBadge(v)}<span class="muted">${esc(s.fwd_to)} 已通过验证</span></p>`
     : `<p class="status-line">${verifyBadge(v)}<span class="muted">${v === 'pending' ? `验证邮件已发送至 ${esc(s.fwd_to)}，点击邮件中的链接后开始转发` : '目标地址未提交到 Cloudflare'}</span></p>`;
@@ -717,10 +719,7 @@ function fwdStatusPanel(s) {
     <h2>转发状态</h2>
     ${verify}
     <p class="status-line">${line}</p>
-    <div class="actions">
-      ${v && v !== 'verified' ? `<button class="primary" type="button" id="fwdVerify">${v === 'pending' ? '重新发送验证邮件' : '重新提交'}</button>` : ''}
-      ${(v === 'verified' || !v) && state.me.can_resend ? '<button class="primary" type="button" id="fwdTest">发送测试邮件</button>' : ''}
-    </div>
+    ${btns ? `<div class="actions">${btns}</div>` : ''}
     ${state.me.can_resend ? '' : `<p class="hint">用其他邮箱给 ${esc(state.me.address)} 发一封邮件，即可在此查看转发结果。</p>`}
   </section>`;
 }
