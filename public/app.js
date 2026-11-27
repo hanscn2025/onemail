@@ -719,9 +719,9 @@ function fwdStatusPanel(s) {
     <p class="status-line">${line}</p>
     <div class="actions">
       ${v && v !== 'verified' ? `<button class="primary" type="button" id="fwdVerify">${v === 'pending' ? '重新发送验证邮件' : '重新提交'}</button>` : ''}
-      ${v === 'verified' || !v ? (state.me.can_send ? '<button class="primary" type="button" id="fwdTest">发送测试邮件</button>' : '') : ''}
+      ${(v === 'verified' || !v) && state.me.can_resend ? '<button class="primary" type="button" id="fwdTest">发送测试邮件</button>' : ''}
     </div>
-    ${state.me.can_send ? '' : '<p class="hint">发信服务未启用，无法发送测试邮件。可向本邮箱发送一封邮件后查看状态。</p>'}
+    ${state.me.can_resend ? '' : `<p class="hint">用其他邮箱给 ${esc(state.me.address)} 发一封邮件，即可在此查看转发结果。</p>`}
   </section>`;
 }
 

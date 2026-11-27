@@ -182,7 +182,11 @@ export async function extra(path, method, request, env, user, url) {
         from: { email: u.address, name: u.name || '' }, to: [u.address], cc: [], bcc: [], attachments: [],
         subject: 'OneMail 转发测试', text: `这是一封转发测试邮件。若 ${u.fwd_to} 收到本邮件，说明转发配置正确。`,
       });
-    } catch (e) { return err(`测试邮件发送失败：${e.message}`); }
+    } catch (e) {
+      // Cloudflare 自带发信未开通时只能发给已验证地址
+      if (/not a verified address/i.test(e.message)) return err('当前发信方式无法发送测试邮件，请用其他邮箱给本邮箱发一封邮件进行测试');
+      return err(`测试邮件发送失败：${e.message}`);
+    }
     return json({ ok: true, at });
   }
 
