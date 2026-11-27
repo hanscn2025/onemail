@@ -436,6 +436,7 @@ export default {
     const url = new URL(request.url);
     // 登录凭证只在 https 下有效:http 访问一律跳到 https,否则登录后会被退回登录页(本地开发除外)
     if (url.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname)) {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return Response.json({ error: '请使用 https 访问' }, { status: 403 });
       url.protocol = 'https:';
       return Response.redirect(url.toString(), 301);
     }
