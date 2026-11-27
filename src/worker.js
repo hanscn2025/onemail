@@ -108,7 +108,7 @@ async function api(request, env, url) {
     const full = await env.DB.prepare('SELECT signature FROM users WHERE id = ?').bind(user.id).first();
     const out = {
       address: user.address, name: user.name, is_admin: !!user.is_admin, domains: domainsOf(env),
-      can_send: !!(env.RESEND_API_KEY || env.EMAIL), can_resend: !!env.RESEND_API_KEY, signature: full?.signature || '', from: await fromAddresses(env, user),
+      can_send: !!(env.RESEND_API_KEY || env.EMAIL), can_resend: !!env.RESEND_API_KEY, fwd_on: !!env.FWD_ON, signature: full?.signature || '', from: await fromAddresses(env, user),
     };
     // 启用了 IMAP 网关时，客户端设置页显示收信服务器
     if (env.IMAP_ON && env.IMAP_HOST) out.imap = { host: env.IMAP_HOST.split(':')[0], port: Number(env.IMAP_HOST.split(':')[1]) || 993 };

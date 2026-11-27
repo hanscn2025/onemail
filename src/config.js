@@ -160,8 +160,6 @@ async function loadConfig(env) {
     domains: env.DOMAINS !== undefined ? env.DOMAINS : s.domains || '',
     catchAll: env.CATCH_ALL !== undefined ? env.CATCH_ALL : s.catch_all || '',
     resendKey: env.RESEND_API_KEY || s.resend_key || '',
-    catchAllFwd: s.catch_all_fwd || '',
-    catchAllFwdMode: s.catch_all_fwd_mode || 'cf',
     catchAllOn: s.catch_all_off !== '1',       // 任意前缀收信,默认打开
     tgToken: s.tg_token || '',
     tgBot: s.tg_bot || '',
@@ -171,6 +169,10 @@ async function loadConfig(env) {
     imapHost: s.imap_host || '',
     imapKey: s.imap_gw_key || '',
     catchAllLocked: env.CATCH_ALL !== undefined,
+    // 转发服务:默认关闭;开启时必须有 Cloudflare API Token,用来自动提交目标地址
+    fwdOn: s.fwd_on === '1' && !!s.cf_token && !!s.cf_account,
+    cfToken: s.cf_token || '',
+    cfAccount: s.cf_account || '',
   };
   if (cfg.secret) { cached = cfg; cachedAt = Date.now(); } // 设置完成前不缓存，别的实例完成设置后这里能读到
   return cfg;
@@ -184,8 +186,6 @@ export async function withConfig(env) {
     DOMAINS: { value: cfg.domains },
     CATCH_ALL: { value: cfg.catchAll },
     RESEND_API_KEY: { value: cfg.resendKey },
-    CATCH_ALL_FWD: { value: cfg.catchAllFwd },
-    CATCH_ALL_FWD_MODE: { value: cfg.catchAllFwdMode },
     CATCH_ALL_ON: { value: cfg.catchAllOn },
     TG_TOKEN: { value: cfg.tgToken },
     TG_BOT: { value: cfg.tgBot },
@@ -195,6 +195,9 @@ export async function withConfig(env) {
     IMAP_HOST: { value: cfg.imapHost },
     IMAP_KEY: { value: cfg.imapKey },
     CATCH_ALL_LOCKED: { value: cfg.catchAllLocked },
+    FWD_ON: { value: cfg.fwdOn },
+    CF_TOKEN: { value: cfg.cfToken },
+    CF_ACCOUNT: { value: cfg.cfAccount },
   });
 }
 

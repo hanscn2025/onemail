@@ -3,6 +3,7 @@ import { hashPassword } from './auth.js';
 import { saveSetting, getSetting } from './config.js';
 import { snippetOf, sendOut } from './mail.js';
 import { tgCall, tgLink } from './telegram.js';
+import { checkToken, addDest, destStatus, destStatuses, resendDest } from './cfapi.js';
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -38,6 +39,15 @@ function checkFwd(env, v) {
   if (!EMAIL_RE.test(a)) return { error: `转发地址格式无效：${a}` };
   if (isLocal(env, a)) return { error: '转发地址不能为本域名地址' };
   return { value: a };
+}
+
+// 保存账号转发前:转发服务要开着;直接转发的地址自动提交到 Cloudflare 等待验证
+async function prepFwd(env, to, mode) {
+  if (!to) return null;
+  if (!env.FWD_ON) return '转发服务未开启，请联系管理员';
+  if (mode === 'send') return null;
+  try { await addDest(env, to); return null; }
+  catch (e) { return `无法提交到 Cloudflare：${e.message}`; }
 }
 
 function randomLocal() {
@@ -125,6 +135,7 @@ export async function extra(path, method, request, env, user, url) {
       quota_mb: u.quota_mb, used, send_limit: u.send_limit, sent_24h: sent,
       tg_bot: env.TG_TOKEN ? env.TG_BOT : '', tg_bound: !!u.tg_chat, tg_body: !!u.tg_body, tg_bulk: !!u.tg_bulk,
       fwd_status: await fwdStatus(env, u),
+      fwd_verify: await verifyOf(env, u),
     });
   }
   if (path === '/settings' && method === 'POST') {
@@ -133,9 +144,13 @@ export async function extra(path, method, request, env, user, url) {
     const put = (col, v) => { sets.push(`${col} = ?`); args.push(v); };
     if ('name' in b) put('name', clean(b.name, 80));
     if ('signature' in b) put('signature', clean(b.signature, 2000));
-    if ('fwd_to' in b) { const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error); put('fwd_to', f.value); }
+    if ('fwd_to' in b) {
+      const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
+      const fm = checkMode(env, b.fwd_mode || 'cf'); if (fm.error) return err(fm.error);
+      const e = await prepFwd(env, f.value, fm.value); if (e) return err(e);
+      put('fwd_to', f.value); put('fwd_mode', fm.value);
+    }
     if ('fwd_keep' in b) put('fwd_keep', b.fwd_keep ? 1 : 0);
-    if ('fwd_mode' in b) { const f = checkMode(env, b.fwd_mode); if (f.error) return err(f.error); put('fwd_mode', f.value); }
     if ('ar_on' in b) put('ar_on', b.ar_on ? 1 : 0);
     if ('ar_subject' in b) put('ar_subject', clean(b.ar_subject, 200));
     if ('ar_body' in b) put('ar_body', clean(b.ar_body, 5000));
@@ -145,6 +160,15 @@ export async function extra(path, method, request, env, user, url) {
     if (!sets.length) return json({ ok: true });
     await env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...args, user.id).run();
     return json({ ok: true });
+  }
+
+  // 重新发送 Cloudflare 验证邮件(直接转发的目标地址)
+  if (path === '/fwd/verify' && method === 'POST') {
+    const u = await env.DB.prepare('SELECT fwd_to, fwd_mode FROM users WHERE id = ?').bind(user.id).first();
+    if (!env.FWD_ON) return err('转发服务未开启');
+    if (!u.fwd_to || u.fwd_mode === 'send') return err('无需验证');
+    try { const st = await resendDest(env, u.fwd_to); return json({ ok: true, status: st }); }
+    catch (e) { return err(`无法提交到 Cloudflare：${e.message}`); }
   }
 
   // 发测试信:从自己的地址发给自己,走完整的收信 → 转发流程
@@ -174,7 +198,7 @@ export async function extra(path, method, request, env, user, url) {
     const out = { items: r.results.map(addrRow), domain: domainsOf(env)[0] || '' };
     // 默认规则就是兜底规则；管理员能看能改
     out.catch_all_on = !!env.CATCH_ALL_ON;
-    if (user.is_admin) out.defaults = { box: env.CATCH_ALL || '', fwd: env.CATCH_ALL_FWD || '', locked: !!env.CATCH_ALL_LOCKED };
+    if (user.is_admin) out.defaults = { box: env.CATCH_ALL || '', fwd: '', locked: !!env.CATCH_ALL_LOCKED };
     return json(out);
   }
   if (path === '/temp' && method === 'POST') {
@@ -295,6 +319,10 @@ export async function extra(path, method, request, env, user, url) {
          (SELECT group_concat(a.address, ', ') FROM addresses a WHERE a.owner = u.address AND a.kind = 'alias') AS aliases
        FROM users u ORDER BY u.is_admin DESC, u.address`
     ).all();
+    if (env.FWD_ON && r.results.some((u) => u.fwd_to && u.fwd_mode !== 'send')) {
+      const st = await destStatuses(env).catch(() => null);
+      if (st) for (const u of r.results) if (u.fwd_to && u.fwd_mode !== 'send') u.fwd_verify = st.get(u.fwd_to) || 'missing';
+    }
     return json({ items: r.results, domains: domainsOf(env), catch_all: env.CATCH_ALL || '', default_quota_mb: Number(await getSetting(env, 'default_quota_mb')) || 0 });
   }
   if (path === '/admin/users' && method === 'POST') {
@@ -306,6 +334,7 @@ export async function extra(path, method, request, env, user, url) {
     if (await taken(env, address)) return err('该地址已被账号、别名或临时地址占用');
     const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
     const fm = b.fwd_mode ? checkMode(env, b.fwd_mode) : { value: 'cf' }; if (fm.error) return err(fm.error);
+    { const e = await prepFwd(env, f.value, fm.value); if (e) return err(e); }
     await env.DB.prepare('INSERT INTO users (address, name, pass_hash, is_admin, quota_mb, send_limit, fwd_to, fwd_keep, fwd_mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(address, clean(b.name, 80), await hashPassword(b.password), b.is_admin ? 1 : 0, Math.max(0, Number('quota_mb' in b ? b.quota_mb : await getSetting(env, 'default_quota_mb')) || 0), Math.max(0, Number(b.send_limit) || 0),
         f.value, b.fwd_keep === false ? 0 : 1, fm.value, Date.now()).run();
@@ -336,8 +365,12 @@ export async function extra(path, method, request, env, user, url) {
       if ('is_admin' in b) put('is_admin', b.is_admin ? 1 : 0);
       if ('quota_mb' in b) put('quota_mb', Math.max(0, Number(b.quota_mb) || 0));
       if ('send_limit' in b) put('send_limit', Math.max(0, Number(b.send_limit) || 0));
-      if ('fwd_to' in b) { const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error); put('fwd_to', f.value); }
-      if ('fwd_mode' in b) { const f = checkMode(env, b.fwd_mode); if (f.error) return err(f.error); put('fwd_mode', f.value); }
+      if ('fwd_to' in b) {
+        const f = checkFwd(env, b.fwd_to); if (f.error) return err(f.error);
+        const fm = checkMode(env, b.fwd_mode || 'cf'); if (fm.error) return err(fm.error);
+        const e = await prepFwd(env, f.value, fm.value); if (e) return err(e);
+        put('fwd_to', f.value); put('fwd_mode', fm.value);
+      }
       if ('disabled' in b) { put('disabled', b.disabled ? 1 : 0); if (b.disabled) sets.push('session_ver = session_ver + 1'); }
       if (sets.length) await env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...args, target.id).run();
       return json({ ok: true });
@@ -463,9 +496,31 @@ export async function extra(path, method, request, env, user, url) {
     return json({ ok: true, note: '已保存' });
   }
 
+  // ---------- 转发服务:开关 + Cloudflare API Token ----------
+  if (path === '/admin/forwarding' && method === 'GET') {
+    const n = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM users WHERE fwd_to != ''`).first()).n;
+    return json({ on: !!env.FWD_ON, account: env.FWD_ON ? (await getSetting(env, 'cf_account_name')) || '' : '', tail: env.FWD_ON ? env.CF_TOKEN.slice(-4) : '', users: n });
+  }
+  if (path === '/admin/forwarding' && method === 'POST') {
+    const b = await body(request);
+    if (b.on === false) {
+      for (const k of ['fwd_on', 'cf_token', 'cf_account', 'cf_account_name']) await saveSetting(env, k, null);
+      return json({ ok: true, note: '转发服务已关闭' });
+    }
+    const token = String(b.token || '').trim();
+    if (!token) return err('请填写 API Token');
+    let acc;
+    try { acc = await checkToken(env, token); } catch (e) { return err(e.message); }
+    await saveSetting(env, 'cf_token', token);
+    await saveSetting(env, 'cf_account', acc.id);
+    await saveSetting(env, 'cf_account_name', acc.name || '');
+    await saveSetting(env, 'fwd_on', '1');
+    return json({ ok: true, note: `转发服务已开启（${acc.name || acc.id}）` });
+  }
+
   // ---------- 收信规则：发到不存在地址的信 ----------
   if (path === '/admin/routing' && method === 'GET') {
-    return json({ catch_all_on: !!env.CATCH_ALL_ON, catch_all: env.CATCH_ALL || '', catch_all_fwd: env.CATCH_ALL_FWD || '', catch_all_fwd_mode: env.CATCH_ALL_FWD_MODE || 'cf', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
+    return json({ catch_all_on: !!env.CATCH_ALL_ON, catch_all: env.CATCH_ALL || '', locked: !!env.CATCH_ALL_LOCKED, domain: domainsOf(env)[0] || '' });
   }
   if (path === '/admin/routing' && method === 'POST') {
     const b = await body(request);
@@ -475,14 +530,6 @@ export async function extra(path, method, request, env, user, url) {
       const box = lower(b.catch_all);
       if (box && !(await env.DB.prepare('SELECT 1 FROM users WHERE address = ?').bind(box).first())) return err('通配收件邮箱必须是已存在的账号');
       await saveSetting(env, 'catch_all', box || null);
-    }
-    if ('catch_all_fwd' in b) {
-      const f = checkFwd(env, b.catch_all_fwd); if (f.error) return err(f.error);
-      await saveSetting(env, 'catch_all_fwd', f.value);
-    }
-    if ('catch_all_fwd_mode' in b) {
-      const f = checkMode(env, b.catch_all_fwd_mode); if (f.error) return err(f.error);
-      await saveSetting(env, 'catch_all_fwd_mode', f.value === 'cf' ? null : f.value);
     }
     return json({ ok: true });
   }
@@ -528,6 +575,12 @@ export async function extra(path, method, request, env, user, url) {
 }
 
 // 最近一次转发到这个外部地址的结果
+// 直接转发的目标地址在 Cloudflare 的验证状态;查不到时返回 null,页面不显示
+async function verifyOf(env, u) {
+  if (!env.FWD_ON || !u.fwd_to || u.fwd_mode === 'send') return null;
+  try { return await destStatus(env, u.fwd_to); } catch { return null; }
+}
+
 async function fwdStatus(env, u) {
   if (!u.fwd_to) return null;
   const r = await env.DB.prepare(

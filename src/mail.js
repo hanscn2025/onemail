@@ -70,7 +70,6 @@ export async function route(env, rcpt) {
 function catchAll(env, out) {
   const box = (env.CATCH_ALL || '').trim().toLowerCase();
   if (box) out.boxes.add(box);
-  if (env.CATCH_ALL_FWD) out.forwards.set(env.CATCH_ALL_FWD, env.CATCH_ALL_FWD_MODE || 'cf');
   if (!out.boxes.size && !out.forwards.size) out.reject = 'Address not found';
 }
 
@@ -185,8 +184,9 @@ export async function receive(message, env) {
       const used = (await env.DB.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM messages WHERE mailbox = ?').bind(box).first()).n;
       if (used + size > u.quota_mb * 1048576) { await addLog(env, 'quota', message.from, box, '邮箱满了'); continue; }
     }
-    if (u.fwd_to) r.forwards.set(u.fwd_to, u.fwd_mode || 'cf');
-    users.push({ ...u, keep: !u.fwd_to || !!u.fwd_keep });
+    const fwd = env.FWD_ON && u.fwd_to;
+    if (fwd) r.forwards.set(u.fwd_to, u.fwd_mode || 'cf');
+    users.push({ ...u, keep: !fwd || !!u.fwd_keep });
   }
   if (!users.some((u) => u.keep) && !r.forwards.size) {
     message.setReject('Mailbox full or disabled');

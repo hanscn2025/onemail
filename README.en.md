@@ -40,17 +40,21 @@ Note: if this domain already uses another mail service (Google Workspace, Micros
 
 1. To an **account address**: into that account's inbox, and also forwarded if the account has forwarding set
 2. To an **alias, group or temporary address**: according to its own settings; disabled or expired addresses bounce
-3. To **any other address** (temporary addresses): handled by Temporary mail → 任意前缀收信 (receive at any prefix), which stores it in the admin mailbox by default or forwards it to a custom mailbox; when that switch is off, the message bounces
+3. To **any other address** (temporary addresses): handled by Temporary mail → 任意前缀收信 (receive at any prefix), which stores it in the admin mailbox (forwarded too if the admin has forwarding set); when that switch is off, the message bounces
 
-## Forwarding to external mailboxes
+## Forwarding to external mailboxes (optional)
 
-The temporary mail destination (global), account forwarding (when creating an account or in personal settings) and group members can all be external mailboxes such as Gmail or Outlook. Forwarding uses Cloudflare's built-in forwarding: free and outside the sending quota, but **each external mailbox must be verified once**:
+The forwarding service is off by default. An admin turns it on under **管理中心 → 转发服务 (Admin → Forwarding service)** and enters a Cloudflare API token once:
 
-Cloudflare dashboard → your domain → Email → Email Routing → Destination addresses → Add, then click the verification link sent to that mailbox.
+1. Open Cloudflare [API Tokens](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Create Custom Token
+2. Permission: **Account → Email Routing Addresses → Edit**
+3. Copy the token, paste it into the Forwarding service page and save
 
-Forwarding to an unverified address fails; you will see it in the admin overview and logs.
+After that, each account just enters a forwarding address under **设置 → 转发设置 (Settings → Forwarding)**; admins can also set it for an account in Accounts. OneMail submits the address to Cloudflare automatically, the recipient clicks the verification email, and forwarding starts. The page shows pending / verified. Each address only needs verifying once.
 
-To skip verification, set the forwarding method of the temporary mail destination or an account to **通过发信服务转发 (via sending service)**. This needs Resend sending (below): the message is re-sent through Resend, so any mailbox works without verification. The trade-offs: the recipient sees your receiving address as the sender (replies still go to the original sender), and every forwarded message counts toward your sending quota. External group members always use direct forwarding.
+Forwarding is per mailbox: whatever lands in an account's mailbox, including mail to that account's temporary addresses, follows that account's forwarding setting.
+
+To skip verification, switch the forwarding method to **经发信服务转发 (via sending service)**. This needs Resend sending (below): the message is re-sent through Resend; the recipient sees your receiving address as the sender (replies still go to the original sender), and every forwarded message counts toward your sending quota.
 
 ## How it works
 
@@ -58,7 +62,7 @@ To skip verification, set the forwarding method of the temporary mail destinatio
   If the address has an account, the message goes there; otherwise it goes to the admin mailbox (the admin address from first-run setup).
 - **Web app**: a single-page app in `public/`. Sessions use an HttpOnly cookie; every state-changing request must carry the `X-Mail: 1` header (CSRF protection); 5 wrong passwords in a row from the same IP or for the same account lock it for 15 minutes.
 - **Addresses**: the `addresses` table holds temporary addresses, aliases and groups; the `logs` table holds login, delivery, forwarding and sending records (kept 90 days). Tables and new columns are created on first run, and older databases are upgraded automatically.
-- **Config**: first-run setup writes the domain, catch-all mailbox, catch-all forward, session secret and Resend key to the D1 `settings` table. They can be overridden with vars / secrets: `DOMAINS` (comma-separated), `CATCH_ALL`, `SESSION_SECRET`, `RESEND_API_KEY`.
+- **Config**: first-run setup writes the domain, catch-all mailbox, session secret and Resend key to the D1 `settings` table. They can be overridden with vars / secrets: `DOMAINS` (comma-separated), `CATCH_ALL`, `SESSION_SECRET`, `RESEND_API_KEY`.
 - **Cron**: every day at 03:17 UTC, messages that have been in the trash longer than `TRASH_DAYS` days and expired logs are deleted.
 
 ## Enable sending
@@ -89,7 +93,7 @@ Users can choose whether to include a text preview and whether to push newslette
 
 Cloudflare Workers can't serve IMAP/POP3, so desktop clients can't log in directly. Instead:
 
-- **Receive**: set *Settings → Forward to external mailbox* to Gmail/QQ and add that account to your client.
+- **Receive**: turn on the forwarding service, set *Settings → Forwarding* to Gmail/QQ, and add that account to your client.
 - **Send**: add an SMTP server in your client and send as `you@your-domain`:
 
 | Field | Value |

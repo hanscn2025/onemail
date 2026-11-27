@@ -614,7 +614,7 @@ function fwdModeField(mode = 'cf', name = 'fwd_mode') {
   return `<div class="field"><span class="field-title">转发方式</span>
     <div class="choice">
       <label class="radio-card"><input type="radio" name="${name}" value="cf" ${mode !== 'send' ? 'checked' : ''}>
-        <span><strong>直接转发</strong><span class="muted sm">由 Cloudflare Email Routing 原样转发，目标地址需预先验证${state.me.is_admin ? `<a class="cf-link" href="${CF_ROUTING}" target="_blank" rel="noopener">前往配置${icon('external', 'sm')}</a>` : ''}</span></span></label>
+        <span><strong>直接转发</strong><span class="muted sm">原样转发，目标邮箱首次使用需点击验证邮件</span></span></label>
       <label class="radio-card ${can ? '' : 'off'}"><input type="radio" name="${name}" value="send" ${mode === 'send' ? 'checked' : ''} ${can ? '' : 'disabled'}>
         <span><strong>经发信服务转发</strong><span class="muted sm">${can ? '经 Resend 重新投递，无需验证，计入发信配额' : '需先启用发信服务'}</span></span></label>
     </div></div>`;
@@ -699,56 +699,41 @@ function wireTgBot() {
   if ($('#tgClear')) $('#tgClear').onclick = () => { if (confirm('停用后将解除所有账号的 Telegram 绑定。确认停用？')) save(''); };
 }
 
-// 转发状态:看最近一次转发记录;可以发测试信验证;直接转发要在 Cloudflare 验证目标邮箱
-const CF_ROUTING = 'https://dash.cloudflare.com/?to=/:account/:zone/email/routing/overview';
+// 转发状态:目标邮箱验证状态 + 最近一次转发记录;可以发测试信
+const VERIFY = { verified: ['ok', '已验证'], pending: ['warn', '待验证'], missing: ['bad', '未提交'] };
+function verifyBadge(v) { return VERIFY[v] ? badge(...VERIFY[v]) : ''; }
 function fwdStatusPanel(s) {
   const st = s.fwd_status;
   const line = !st ? `${badge('neutral', '暂无记录')}<span class="muted">可发送测试邮件进行验证</span>`
     : st.ok ? `${badge('ok', '转发正常')}<span class="muted">最近转发 ${fmtDate(st.at, true)}</span>`
       : `${badge('bad', '转发失败')}<span class="muted">${fmtDate(st.at, true)} · ${esc(st.detail)}</span>`;
-  const cf = s.fwd_mode !== 'send';
+  const v = s.fwd_verify;
+  const verify = !v ? '' : v === 'verified'
+    ? `<p class="status-line">${verifyBadge(v)}<span class="muted">${esc(s.fwd_to)} 已通过验证</span></p>`
+    : `<p class="status-line">${verifyBadge(v)}<span class="muted">${v === 'pending' ? `验证邮件已发送至 ${esc(s.fwd_to)}，点击邮件中的链接后开始转发` : '目标地址未提交到 Cloudflare'}</span></p>`;
   return `<section class="panel">
     <h2>转发状态</h2>
+    ${verify}
     <p class="status-line">${line}</p>
-    ${cf ? `<p class="hint">直接转发需先在 Cloudflare「Email Routing → 目标地址」中添加并验证 <strong>${esc(s.fwd_to)}</strong>。${state.me.is_admin ? '' : '此操作需由管理员完成。'}</p>` : ''}
     <div class="actions">
-      ${state.me.can_send ? '<button class="primary" type="button" id="fwdTest">发送测试邮件</button>' : ''}
-      ${cf && state.me.is_admin ? `<a class="btn-link" href="${CF_ROUTING}" target="_blank" rel="noopener">${icon('external', 'sm')}前往 Cloudflare 验证</a>` : ''}
+      ${v && v !== 'verified' ? `<button class="primary" type="button" id="fwdVerify">${v === 'pending' ? '重新发送验证邮件' : '重新提交'}</button>` : ''}
+      ${v === 'verified' || !v ? (state.me.can_send ? '<button class="primary" type="button" id="fwdTest">发送测试邮件</button>' : '') : ''}
     </div>
     ${state.me.can_send ? '' : '<p class="hint">发信服务未启用，无法发送测试邮件。可向本邮箱发送一封邮件后查看状态。</p>'}
   </section>`;
 }
 
 // ---------- 临时邮箱收件地址(管理中心 → 临时邮箱) ----------
-// r: { catch_all, catch_all_fwd, locked } —— 就是兜底规则
+// r: { catch_all, catch_all_on, domain } —— 就是兜底规则,只投递到管理员邮箱;转发由各邮箱自己的转发设置决定
 function tempTargetPanel(r) {
   const on = r.catch_all_on !== false;
   const box = r.catch_all || state.me.address;
-  const dest = r.catch_all_fwd ? `${esc(r.catch_all_fwd)}${r.catch_all ? ' 和管理员邮箱' : ''}` : esc(box);
+  const dest = esc(box);
   return `<div class="blk catch-bar" data-target>
     <div class="cb-text"><strong>任意前缀收信</strong>
-      <span class="muted">${on ? `未创建的 *@${esc(r.domain || '')} 地址均可收信，投递至 ${dest}` : '已停用，仅已创建的临时地址可收信'}</span>
-      ${on ? '<button class="lnk" type="button" data-edit-target>编辑投递规则</button>' : ''}</div>
+      <span class="muted">${on ? `未创建的 *@${esc(r.domain || '')} 地址均可收信，投递至 ${dest}` : '已停用，仅已创建的临时地址可收信'}</span></div>
     <label class="switch" title="${on ? '关闭' : '打开'}"><input type="checkbox" data-toggle ${on ? 'checked' : ''}><span class="track"></span></label>
   </div>`;
-}
-
-// 编辑投递规则:弹窗里选管理员邮箱或外部邮箱
-function targetFields(r) {
-  const custom = !!r.catch_all_fwd;
-  const box = r.catch_all || state.me.address;
-  return `<div class="field">
-    <div class="choice">
-      <label class="radio-card"><input type="radio" name="mode" value="admin" ${custom ? '' : 'checked'}>
-        <span><strong>管理员邮箱</strong><span class="muted sm">${esc(box)}</span></span></label>
-      <label class="radio-card"><input type="radio" name="mode" value="custom" ${custom ? 'checked' : ''}>
-        <span><strong>外部邮箱</strong><span class="muted sm">转发至 Gmail、QQ 邮箱等外部服务</span></span></label>
-    </div></div>
-    <div data-custom class="stack ${custom ? '' : 'hidden'}">
-      <label>目标地址<input name="fwd" type="email" value="${esc(r.catch_all_fwd)}" placeholder="例如 you@gmail.com"></label>
-      ${fwdModeField(r.catch_all_fwd_mode)}
-      <label class="check"><input type="checkbox" name="keep" ${!custom || r.catch_all || r.locked ? 'checked' : ''} ${r.locked ? 'disabled' : ''}> 同时保留副本至管理员邮箱</label>
-    </div>`;
 }
 
 function wireTempTarget(bar, r, after) {
@@ -763,26 +748,6 @@ function wireTempTarget(bar, r, after) {
       toast(on ? '已启用任意前缀收信' : '已停用任意前缀收信，30 秒内生效');
       if (after) await after();
     } catch (x) { toast(x.message, 'err'); cb.checked = !on; }
-  };
-  const edit = $('[data-edit-target]', bar);
-  if (edit) edit.onclick = () => {
-    editDialog('投递规则', targetFields(r), async (f, form) => {
-      const box = r.catch_all || state.me.address;
-      let j;
-      if (f.get('mode') === 'admin') j = { catch_all: box, catch_all_fwd: '' };
-      else {
-        const fwd = String(f.get('fwd') || '').trim();
-        if (!fwd) throw new Error('请填写目标地址');
-        j = { catch_all_fwd: fwd, catch_all_fwd_mode: f.get('fwd_mode') || 'cf', catch_all: form.keep.checked ? box : '' };
-      }
-      if (r.locked) delete j.catch_all;
-      await api('/admin/routing', { method: 'POST', json: j });
-      toast('已保存，30 秒内生效');
-      if (after) await after();
-    });
-    const body = $('#editBody');
-    const sync = () => $('[data-custom]', body).classList.toggle('hidden', $('[name=mode]:checked', body).value !== 'custom');
-    $$('[name=mode]', body).forEach((x) => (x.onchange = sync));
   };
 }
 
@@ -935,7 +900,7 @@ const SETTINGS_TABS = [
 ];
 async function pageSettings(tab = 'account') {
   // 「客户端」只在管理员启用 IMAP 服务后出现:没有 IMAP 时客户端收不到信,配置没有意义
-  const tabs = SETTINGS_TABS.filter((t) => (!t[3] || state.me.is_admin) && (t[0] !== 'client' || state.me.imap));
+  const tabs = SETTINGS_TABS.filter((t) => (!t[3] || state.me.is_admin) && (t[0] !== 'client' || state.me.imap) && (t[0] !== 'forward' || state.me.fwd_on));
   if (!tabs.some((t) => t[0] === tab)) tab = 'account';
   const s = await api('/settings');
   const tg = tab === 'notify' && state.me.is_admin ? await api('/admin/telegram') : null;
@@ -1008,6 +973,11 @@ async function pageSettings(tab = 'account') {
       if (x && x.tg_bound) { clearInterval(t); toast('已绑定 Telegram'); pageSettings('notify'); }
     }, 3000);
   };
+  if ($('#fwdVerify')) $('#fwdVerify').onclick = async (e) => {
+    e.target.disabled = true;
+    try { const x = await api('/fwd/verify', { method: 'POST' }); toast(x.status === 'verified' ? '该地址已通过验证' : '验证邮件已发送'); pageSettings('forward'); }
+    catch (x) { toast(x.message, 'err'); e.target.disabled = false; }
+  };
   if ($('#fwdTest')) $('#fwdTest').onclick = async () => {
     const b = $('#fwdTest');
     b.disabled = true; b.textContent = '发送中…';
@@ -1057,7 +1027,7 @@ async function pageSettings(tab = 'account') {
 // ---------- 管理中心 ----------
 const ADMIN_TABS = [
   ['overview', '概览', 'chart'], ['users', '账号管理', 'users'], ['brand', '品牌设置', 'palette'],
-  ['send', '发信设置', 'send'], ['imap', 'IMAP 服务', 'devices'], ['logs', '记录', 'history'],
+  ['send', '发信设置', 'send'], ['forward', '转发服务', 'forward'], ['imap', 'IMAP 服务', 'devices'], ['logs', '记录', 'history'],
 ];
 
 async function pageAdmin(tab = 'overview') {
@@ -1125,7 +1095,7 @@ const ADMIN = {
         <td><div class="who-cell">${avatar(u.name, u.address)}<div><div><strong>${esc(u.name || u.address.split('@')[0])}</strong> ${u.is_admin ? badge('accent', '管理员') : ''}</div>
           <div class="muted sm">${esc(u.address)}${u.aliases ? ` · 别名 ${esc(u.aliases)}` : ''}</div></div></div></td>
         <td>${u.disabled ? badge('neutral', '已停用') : badge('ok', '正常')}${u.ar_on ? '<div class="muted sm">自动回复中</div>' : ''}</td>
-        <td>${u.fwd_to ? `${esc(u.fwd_to)}${u.fwd_mode === 'send' ? '<div class="muted sm">通过发信服务</div>' : ''}` : '<span class="muted">—</span>'}</td>
+        <td>${u.fwd_to ? `${esc(u.fwd_to)}<div class="muted sm">${!state.me.fwd_on ? '转发服务未开启' : u.fwd_mode === 'send' ? '经发信服务' : verifyBadge(u.fwd_verify)}</div>` : '<span class="muted">—</span>'}</td>
         <td>${fmtSize(u.used)}${u.quota_mb ? ` / ${u.quota_mb} MB` : ''}<div class="muted sm">${u.total} 封${u.send_limit ? ` · 每天最多发 ${u.send_limit} 封` : ''}</div></td>
         <td>${ago(u.last_login)}</td>
         ${rowCols(`<button class="lnk" data-uedit="${u.id}">编辑</button>`, [
@@ -1145,7 +1115,8 @@ const ADMIN = {
         desc: sendReady ? '限制每天可发送的邮件数量，默认不限' : '需先在「管理中心 → 发信设置」启用发信服务',
         body: `<label>每天发信上限（封）<input name="send_limit" type="number" min="1" value="${u.send_limit || 100}" data-req></label>` })}
       ${sendReady ? '' : `<input type="hidden" name="send_limit_keep" value="${u.send_limit || 0}">`}
-      ${swField({ name: 'fwd_on', title: '转发', on: !!u.fwd_to, desc: '将收到的邮件同时转发到其他邮箱，默认不转发',
+      ${swField({ name: 'fwd_on', title: '转发', on: !!u.fwd_to, off: !state.me.fwd_on,
+        desc: state.me.fwd_on ? '将收到的邮件同时转发到其他邮箱，默认不转发' : '需先在「管理中心 → 转发服务」开启',
         body: `<label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com" data-req></label>
           ${fwdModeField(u.fwd_mode)}` })}
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
@@ -1157,7 +1128,8 @@ const ADMIN = {
       cb.onchange = () => { sync(); if (cb.checked) $('input[data-req]', body)?.focus(); };
     });
     const fwdOf = (f, sendReady = !!state.me.can_resend) => ({
-      ...(f.get('fwd_on') === 'on' ? { fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf' } : { fwd_to: '', fwd_mode: 'cf' }),
+      // 转发服务关闭时不改原有的转发设置
+      ...(!state.me.fwd_on ? {} : f.get('fwd_on') === 'on' ? { fwd_to: f.get('fwd_to'), fwd_mode: f.get('fwd_mode') || 'cf' } : { fwd_to: '', fwd_mode: 'cf' }),
       // 发信未启用时开关不可用,保留原值
       send_limit: sendReady ? (f.get('limit_on') === 'on' ? Number(f.get('send_limit')) : 0) : Number(f.get('send_limit_keep') || 0),
     });
@@ -1370,6 +1342,38 @@ const ADMIN = {
     wireToggle($('#sendPanel'), { active: r.source === 'settings', off: async () => {
       if (!confirm('停用后将无法通过 Resend 发信。确认停用？')) return false;
       await save(''); return true;
+    } });
+  },
+
+  // 转发服务(可选):开启时填 Cloudflare API Token,之后转发地址自动提交验证
+  async forward(el) {
+    const r = await api('/admin/forwarding');
+    const status = r.on ? `<p class="status-line">${badge('ok', '已开启')}<span class="muted">Cloudflare 账户：${esc(r.account || '—')} · API Token …${esc(r.tail)}</span></p>` : '';
+    el.innerHTML = `<div class="narrow-col">${togglePanel({ id: 'fwdSvc', tag: 'form', title: '转发服务', on: r.on,
+      desc: '开启后，各账号可在「设置 → 转发设置」中将邮件转发到外部邮箱', body: `
+      ${status}
+      <label>Cloudflare API Token<input name="token" type="password" autocomplete="off" ${r.on ? '' : 'required'}
+        placeholder="${r.on ? '如需更换，输入新的 API Token' : '粘贴 API Token'}"></label>
+      <ol class="steps">
+        <li>打开 Cloudflare <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">API 令牌</a>，点击「创建令牌 → 创建自定义令牌」</li>
+        <li>权限选择「帐户 → 电子邮件路由地址 → 编辑」（Email Routing Addresses：Edit）</li>
+        <li>创建后复制令牌，粘贴到上方并保存</li>
+      </ol>
+      <p class="hint">转发地址保存后会自动提交到 Cloudflare，对方点击验证邮件即可生效。</p>
+      <div class="actions"><button class="primary" type="submit">保存</button></div>` })}</div>`;
+    const f = $('#fwdSvc');
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const token = f.token.value.trim();
+      if (!token) return;
+      const b = $('button[type=submit]', f); b.disabled = true; b.textContent = '正在验证…';
+      try { const x = await api('/admin/forwarding', { method: 'POST', json: { token } }); toast(x.note); state.me = await api('/me'); ADMIN.forward(el); }
+      catch (x) { toast(x.message, 'err'); b.disabled = false; b.textContent = '保存'; }
+    };
+    wireToggle(f, { active: r.on, off: async () => {
+      if (!confirm(r.users ? `关闭后 ${r.users} 个账号的转发将暂停。确认关闭？` : '确认关闭转发服务？')) return false;
+      try { const x = await api('/admin/forwarding', { method: 'POST', json: { on: false } }); toast(x.note); state.me = await api('/me'); ADMIN.forward(el); return true; }
+      catch (x) { toast(x.message, 'err'); return false; }
     } });
   },
 
