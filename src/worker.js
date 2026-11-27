@@ -434,6 +434,11 @@ async function cleanupRetention(env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    // 登录凭证只在 https 下有效:http 访问一律跳到 https,否则登录后会被退回登录页(本地开发除外)
+    if (url.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname)) {
+      url.protocol = 'https:';
+      return Response.redirect(url.toString(), 301);
+    }
     // Telegram 机器人回调：用 secret_token 头校验，不走登录
     if (url.pathname === '/tg/webhook' && request.method === 'POST') {
       try { return await tgWebhook(request, await withConfig(env)); } catch (e) { console.error(e); return new Response('ok'); }
