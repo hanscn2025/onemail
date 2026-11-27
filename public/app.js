@@ -706,7 +706,7 @@ const VERIFY = { verified: ['ok', '已验证'], pending: ['warn', '待验证'], 
 function verifyBadge(v) { return VERIFY[v] ? badge(...VERIFY[v]) : ''; }
 function fwdStatusPanel(s) {
   const st = s.fwd_status;
-  const line = !st ? `${badge('neutral', '暂无记录')}<span class="muted">可发送测试邮件进行验证</span>`
+  const line = !st ? `${badge('neutral', '暂无记录')}<span class="muted">收到邮件后在此显示转发结果</span>`
     : st.ok ? `${badge('ok', '转发正常')}<span class="muted">最近转发 ${fmtDate(st.at, true)}</span>`
       : `${badge('bad', '转发失败')}<span class="muted">${fmtDate(st.at, true)} · ${esc(st.detail)}</span>`;
   const v = s.fwd_verify;
