@@ -45,8 +45,8 @@
 
 转发服务默认关闭。管理员在「管理中心 → 转发服务」打开,并填一次 Cloudflare API Token:
 
-1. 打开 Cloudflare [API 令牌](https://dash.cloudflare.com/profile/api-tokens) → 创建令牌 → 创建自定义令牌
-2. 权限选「帐户 → 电子邮件路由地址 → 编辑」(Email Routing Addresses: Edit)
+1. 打开 Cloudflare [API 令牌](https://dash.cloudflare.com/profile/api-tokens) → 创建令牌 → 从头开始 → 从 Account 策略开始
+2. 勾选两项权限:「电子邮件路由地址 → 编辑」(Email Routing Addresses: Edit)和「帐户设置 → 读取」(Account Settings: Read)
 3. 创建后复制令牌,粘贴到「转发服务」并保存
 
 开启后,每个账号在「设置 → 转发设置」里填转发邮箱即可(管理员也可以在「账号管理」里替账号设置)。保存时 OneMail 会自动把地址提交到 Cloudflare,对方邮箱收到验证邮件、点一下链接就开始转发,页面会显示「待验证 / 已验证」。同一个地址只需验证一次。

@@ -1355,8 +1355,8 @@ const ADMIN = {
       <label>Cloudflare API Token<input name="token" type="password" autocomplete="off" ${r.on ? '' : 'required'}
         placeholder="${r.on ? '如需更换，输入新的 API Token' : '粘贴 API Token'}"></label>
       <ol class="steps">
-        <li>打开 Cloudflare <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">API 令牌</a>，点击「创建令牌 → 创建自定义令牌」</li>
-        <li>权限选择「帐户 → 电子邮件路由地址 → 编辑」（Email Routing Addresses：Edit）</li>
+        <li>打开 Cloudflare <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">API 令牌</a>，点击「创建令牌 → 从头开始 → 从 Account 策略开始」</li>
+        <li>勾选两项权限：「电子邮件路由地址 → 编辑」和「帐户设置 → 读取」</li>
         <li>创建后复制令牌，粘贴到上方并保存</li>
       </ol>
       <p class="hint">转发地址保存后会自动提交到 Cloudflare，对方点击验证邮件即可生效。</p>

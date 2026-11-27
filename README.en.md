@@ -47,7 +47,7 @@ Note: if this domain already uses another mail service (Google Workspace, Micros
 The forwarding service is off by default. An admin turns it on under **管理中心 → 转发服务 (Admin → Forwarding service)** and enters a Cloudflare API token once:
 
 1. Open Cloudflare [API Tokens](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Create Custom Token
-2. Permission: **Account → Email Routing Addresses → Edit**
+2. Permissions: **Account → Email Routing Addresses → Edit** and **Account → Account Settings → Read**
 3. Copy the token, paste it into the Forwarding service page and save
 
 After that, each account just enters a forwarding address under **设置 → 转发设置 (Settings → Forwarding)**; admins can also set it for an account in Accounts. OneMail submits the address to Cloudflare automatically, the recipient clicks the verification email, and forwarding starts. The page shows pending / verified. Each address only needs verifying once.

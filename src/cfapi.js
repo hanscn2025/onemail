@@ -23,12 +23,12 @@ export async function checkToken(env, token) {
   let accounts;
   try { accounts = (await call(env, token, '/accounts?per_page=50')).result || []; }
   catch (e) { throw new Error(e.status === 401 || e.status === 403 || e.code === 1000 ? 'API Token 无效' : e.message); }
-  if (!accounts.length) throw new Error('该 API Token 无权访问任何 Cloudflare 账户');
+  if (!accounts.length) throw new Error('API Token 缺少「帐户设置：读取」权限，无法识别 Cloudflare 帐户');
   for (const a of accounts) {
     try { await call(env, token, `/accounts/${a.id}/email/routing/addresses?per_page=1`); return { id: a.id, name: a.name }; }
     catch { /* 这个账户没有权限,试下一个 */ }
   }
-  throw new Error('API Token 缺少「Email Routing Addresses：Edit」权限');
+  throw new Error('API Token 缺少「电子邮件路由地址：编辑」权限');
 }
 
 async function listAll(env) {
