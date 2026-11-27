@@ -1315,10 +1315,10 @@ const ADMIN = {
     const dayField = (name, v, def) => `<label>保留天数<input name="${name}" type="number" min="1" max="3650" value="${v || def}" required></label>`;
     el.innerHTML = `
       <section class="panel">
-        <h2>存储用量</h2>
+        <h2>全站存储用量</h2>
         <div><p class="big">${fmtSize(r.used)}<span class="muted"> / 免费额度 10 GB</span></p>
         <div class="meter"><span style="width:${Math.max(pct, r.used ? 0.5 : 0)}%"></span></div></div>
-        <p class="hint">共 ${r.messages} 封邮件。邮件正文和附件存放在 Cloudflare R2，超出免费额度后约 0.015 美元 / GB / 月。${pct >= 80 ? `已使用 ${pct.toFixed(0)}%，建议开启保留期限。` : ''}</p>
+        <p class="hint">所有账号合计 ${r.messages} 封邮件，各账号用量见「管理中心 → 账号」。邮件正文和附件存放在 Cloudflare R2，超出免费额度后约 0.015 美元 / GB / 月。${pct >= 80 ? `已使用 ${pct.toFixed(0)}%，建议开启保留期限。` : ''}</p>
       </section>
       ${togglePanel({ id: 'retTemp', tag: 'form', title: '临时邮箱邮件保留期限', on: r.temp_days > 0,
         desc: '开启后，临时邮箱收到的邮件超过保留天数自动删除，已加星标的邮件保留', body: `
