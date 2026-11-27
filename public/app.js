@@ -1318,7 +1318,7 @@ const ADMIN = {
         <h2>全站存储用量</h2>
         <div><p class="big">${fmtSize(r.used)}<span class="muted"> / 免费额度 10 GB</span></p>
         <div class="meter"><span style="width:${Math.max(pct, r.used ? 0.5 : 0)}%"></span></div></div>
-        <p class="hint">共 ${r.messages} 封邮件，超出免费额度按 $0.015 / GB / 月计费。${pct >= 80 ? `已用 ${pct.toFixed(0)}%，建议开启保留期限。` : ''}</p>
+        <p class="hint">共 ${r.messages} 封邮件。免费额度 10 GB，超出部分按 $0.015 / GB / 月计费。${pct >= 80 ? `已用 ${pct.toFixed(0)}%，建议开启保留期限。` : ''}</p>
       </section>
       ${togglePanel({ id: 'retTemp', tag: 'form', title: '临时邮箱邮件保留期限', on: r.temp_days > 0,
         desc: '开启后，临时邮箱收到的邮件超过保留天数自动删除，已加星标的邮件保留', body: `
