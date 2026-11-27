@@ -26,6 +26,17 @@ const domainsOf = (env) => (env.DOMAINS || '').split(',').map((s) => s.trim().to
 const isLocal = (env, a) => domainsOf(env).includes(String(a).split('@')[1]);
 
 // 决定一封信去哪：存进哪些邮箱、转发到哪些外部地址
+// 「名称.账号」格式:shop.hans@ 属于账号 hans@。账号名本身带点(john.smith)也能认出,取最长的那个
+export async function subOwner(env, addr) {
+  const [l, d] = addr.split('@');
+  const cands = [];
+  for (let i = l.indexOf('.'); i > 0 && i < l.length - 1; i = l.indexOf('.', i + 1)) cands.push(`${l.slice(i + 1)}@${d}`);
+  if (!cands.length) return null;
+  return env.DB.prepare(
+    `SELECT address, disabled FROM users WHERE address IN (${cands.map(() => '?').join(',')}) ORDER BY length(address) DESC LIMIT 1`
+  ).bind(...cands).first();
+}
+
 // 返回 { boxes: Set, forwards: Map（外部地址 → 'cf'|'send'）, reject: string|null, via: 'user'|'temp'|'alias'|'group'|'catchall' }
 export async function route(env, rcpt) {
   const out = { boxes: new Set(), forwards: new Map(), reject: null, via: '' };
@@ -37,6 +48,19 @@ export async function route(env, rcpt) {
     return out;
   }
   const a = await env.DB.prepare('SELECT * FROM addresses WHERE address = ?').bind(rcpt).first();
+  // 名称.账号:没登记过的,或以前被任意前缀自动登记到别处的,都归这个账号
+  const sub = (!a || (a.kind === 'temp' && a.auto)) ? await subOwner(env, rcpt) : null;
+  if (sub) {
+    out.via = 'temp';
+    if (a && (!a.enabled || (a.expires_at && a.expires_at < Date.now()))) { out.reject = 'Address not found'; return out; }
+    if (sub.disabled) { out.reject = 'Mailbox disabled'; return out; }
+    out.boxes.add(sub.address);
+    if (a) await env.DB.prepare('UPDATE addresses SET owner = ?, auto = 0, hits = hits + 1, last_at = ? WHERE address = ?').bind(sub.address, Date.now(), rcpt).run();
+    else await env.DB.prepare(
+      `INSERT OR IGNORE INTO addresses (address, kind, owner, auto, hits, last_at, created_at) VALUES (?, 'temp', ?, 0, 1, ?, ?)`
+    ).bind(rcpt, sub.address, Date.now(), Date.now()).run();
+    return out;
+  }
   if (a) {
     out.via = a.kind;
     if (!a.enabled || (a.expires_at && a.expires_at < Date.now())) { out.reject = 'Address not found'; return out; }

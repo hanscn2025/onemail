@@ -40,7 +40,8 @@ Note: if this domain already uses another mail service (Google Workspace, Micros
 
 1. To an **account address**: into that account's inbox, and also forwarded if the account has forwarding set
 2. To an **alias, group or temporary address**: according to its own settings; disabled or expired addresses bounce
-3. To **any other address** (temporary addresses): handled by Temporary mail → 任意前缀收信 (receive at any prefix), which stores it in the admin mailbox (forwarded too if the admin has forwarding set); when that switch is off, the message bounces
+3. To **name.account** (e.g. `shop.hans@`): into account hans's mailbox with no setup; the address is registered under hans's temporary mail on first use. `hans+shop@` also goes to hans
+4. To **any other address** (temporary addresses): handled by Temporary mail → 任意前缀收信 (receive at any prefix), which stores it in the admin mailbox (forwarded too if the admin has forwarding set); when that switch is off, the message bounces
 
 ## Forwarding to external mailboxes (optional)
 

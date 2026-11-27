@@ -842,7 +842,7 @@ async function pageTemp() {
   ]);
   tempDefaults = defaults || null;
   const anyOn = catch_all_on !== false;
-  page.innerHTML = `<div class="pg-col">${head('临时邮箱', route ? '' : !state.me.is_admin ? '创建临时地址，收到的邮件进入你的收件箱' : anyOn ? `支持任意前缀 <code>@${esc(domain)}</code> 收信` : '仅已创建的临时地址可收信', `
+  page.innerHTML = `<div class="pg-col">${head('临时邮箱', route ? '' : !state.me.is_admin ? `可直接使用 <code>任意名称.${esc(state.me.address.split('@')[0])}@${esc(domain)}</code> 收信` : anyOn ? `支持任意前缀 <code>@${esc(domain)}</code> 收信` : '仅已创建的临时地址可收信', `
     ${searchBox('tempQ', '搜索地址或备注')}
     ${state.me.is_admin ? `<label class="check"><input type="checkbox" id="tempAll" ${all ? 'checked' : ''}> 所有人的</label>` : ''}
     <button class="primary" id="newTemp">${icon('plus')}新建</button>`)}

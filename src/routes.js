@@ -1,7 +1,7 @@
 // 临时地址、个人设置、草稿、管理后台(账号、别名群组、收信规则、统计、记录)
 import { hashPassword } from './auth.js';
 import { saveSetting, getSetting } from './config.js';
-import { snippetOf, sendOut } from './mail.js';
+import { snippetOf, sendOut, subOwner } from './mail.js';
 import { tgCall, tgLink } from './telegram.js';
 import { checkToken, addDest, destStatus, destStatuses, resendDest } from './cfapi.js';
 
@@ -98,6 +98,14 @@ async function backfillAuto(env) {
       env.DB.prepare(`UPDATE addresses SET auto = 0, deliver = 1, fwd_to = '' WHERE kind = 'temp' AND owner IN (SELECT address FROM users WHERE is_admin = 0)`),
     ]);
     await saveSetting(env, 'temp_global_v1', String(Date.now()));
+  }
+  if (!(await getSetting(env, 'sub_temp_v1'))) {
+    const r = await env.DB.prepare(`SELECT address FROM addresses WHERE kind = 'temp' AND auto = 1 AND instr(address, '.') > 0`).all();
+    for (const x of r.results) {
+      const sub = await subOwner(env, x.address);
+      if (sub) await env.DB.prepare('UPDATE addresses SET owner = ?, auto = 0 WHERE address = ?').bind(sub.address, x.address).run();
+    }
+    await saveSetting(env, 'sub_temp_v1', String(Date.now()));
   }
   if (await getSetting(env, 'auto_temp_v1')) return;
   const r = await env.DB.prepare(
@@ -214,6 +222,7 @@ export async function extra(path, method, request, env, user, url) {
     if (!LOCAL_RE.test(local) || local.includes('+')) return err('地址仅支持小写字母、数字、点、连字符和下划线');
     const address = `${local}@${domain}`;
     if (await taken(env, address)) return err('该地址已被占用');
+    if (!user.is_admin) { const o = await subOwner(env, address); if (o && o.address !== user.address) return err('该地址已被占用'); }
     const days = Number(b.days) || 0;
     // 去向不在这里设：管理员的临时地址跟随全局设置(设置 → 临时邮箱收件地址)，普通账号的进自己邮箱
     await env.DB.prepare(
