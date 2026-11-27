@@ -1116,7 +1116,7 @@ const ADMIN = {
         body: `<label>每天发信上限（封）<input name="send_limit" type="number" min="1" value="${u.send_limit || 100}" data-req></label>` })}
       ${sendReady ? '' : `<input type="hidden" name="send_limit_keep" value="${u.send_limit || 0}">`}
       ${swField({ name: 'fwd_on', title: '转发', on: !!u.fwd_to, off: !state.me.fwd_on,
-        desc: state.me.fwd_on ? '将收到的邮件同时转发到其他邮箱，默认不转发' : '需先在「管理中心 → 转发服务」开启',
+        desc: state.me.fwd_on ? '替该账号设置转发，适合不登录的账号（如 info@）。账号本人也可在「设置 → 转发设置」中修改' : '需先在「管理中心 → 转发服务」开启',
         body: `<label>转发到<input name="fwd_to" type="email" value="${esc(u.fwd_to || '')}" placeholder="例如 someone@gmail.com" data-req></label>
           ${fwdModeField(u.fwd_mode)}` })}
       <label class="check"><input type="checkbox" name="is_admin" ${u.is_admin ? 'checked' : ''}> 管理员</label>
